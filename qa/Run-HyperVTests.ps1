@@ -86,35 +86,28 @@ try {
     Ok "VM pronta."
 
     # ---------------------------------------------------------------- 2) injeta artefatos (host -> guest)
-    Info "Preparando o guest para receber arquivos..."
-    Invoke-Command -VMName $VMName -Credential $cred -ScriptBlock {
-        Remove-Item C:\TempPDV -Recurse -Force -ErrorAction SilentlyContinue
-        New-Item -ItemType Directory -Force C:\TempPDV, C:\TempPDV\tests, C:\TempPDV\evidencias | Out-Null
-        # garante o servico de Guest Services (vmicguestinterface) rodando dentro da VM.
-        Set-Service vmicguestinterface -StartupType Automatic -ErrorAction SilentlyContinue
-        Start-Service vmicguestinterface -ErrorAction SilentlyContinue
-    }
-    # Copy-VMFile depende do Guest Service Interface, que demora a ficar pronto apos o boot
-    # (erro 0x80070015 "dispositivo nao esta pronto"). Faz retry ate 6x com pausa.
-    function CopiarComRetry($src, $dst) {
-        for ($t = 1; $t -le 6; $t++) {
-            try { Copy-VMFile -Name $VMName -SourcePath $src -DestinationPath $dst -CreateFullPath -FileSource Host -Force -ErrorAction Stop; return }
-            catch { if ($t -eq 6) { throw }; Start-Sleep 10 }
+    # Usa Copy-Item -ToSession (via PowerShell Direct), que NAO depende do Guest Service
+    # Interface (evita o erro 0x80070015 do Copy-VMFile) e e muito mais confiavel.
+    Info "Abrindo sessao PowerShell Direct para injetar os arquivos..."
+    $sessaoInj = New-PSSession -VMName $VMName -Credential $cred
+    try {
+        Invoke-Command -Session $sessaoInj -ScriptBlock {
+            Remove-Item C:\TempPDV -Recurse -Force -ErrorAction SilentlyContinue
+            New-Item -ItemType Directory -Force C:\TempPDV, C:\TempPDV\tests, C:\TempPDV\evidencias | Out-Null
         }
-    }
-    Info "Injetando artefatos na VM (C:\TempPDV)... (aguardando Guest Services)"
-    CopiarComRetry $SetupPath "C:\TempPDV\Setup_PDVFestaJunina.exe"
-    Ok "Setup injetado."
-    # binarios de teste E2E (FlaUI) - copia a pasta inteira de saida do build de teste
-    if (Test-Path $TestsDir) {
-        Get-ChildItem $TestsDir -File -Recurse | ForEach-Object {
-            $rel = $_.FullName.Substring($TestsDir.Length).TrimStart('\')
-            CopiarComRetry $_.FullName "C:\TempPDV\tests\$rel"
+        Info "Injetando o Setup..."
+        Copy-Item -ToSession $sessaoInj -Path $SetupPath -Destination "C:\TempPDV\Setup_PDVFestaJunina.exe" -Force
+        Ok "Setup injetado."
+
+        if (Test-Path $TestsDir) {
+            Info "Injetando os binarios de teste E2E (pasta inteira)..."
+            # copia a pasta recursivamente numa tacada (Copy-Item -Recurse -ToSession)
+            Copy-Item -ToSession $sessaoInj -Path (Join-Path $TestsDir '*') -Destination "C:\TempPDV\tests\" -Recurse -Force
+            Ok "Binarios de teste E2E injetados."
+        } else {
+            Info "Pasta de testes nao encontrada ($TestsDir); rodarei so o instalador + smoke."
         }
-        Ok "Binarios de teste E2E injetados."
-    } else {
-        Info "Pasta de testes nao encontrada ($TestsDir); rodarei so o instalador + smoke."
-    }
+    } finally { Remove-PSSession $sessaoInj -ErrorAction SilentlyContinue }
 
     # ---------------------------------------------------------------- 3) instala + roda E2E na VM
     Info "Instalando o PDV e rodando a bateria E2E dentro da VM..."
