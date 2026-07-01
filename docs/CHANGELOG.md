@@ -25,11 +25,24 @@ Versionamento [SemVer](https://semver.org/lang/pt-BR/).
 - **Atalho legado removido** (coluna/campo de atalho e tela "Customizar Atalhos"): a
   navegação por teclado é 100% por posição (letra da categoria + número).
 - Testes E2E de UI agora são **condicionais** (rodam só na sandbox; no-op fora).
+- **App robusto em sessão não-interativa**: o tratador de erro não derruba mais o app ao
+  reportar (usa `DefaultDesktopOnly`/só-loga) — essencial para automação/headless.
 
-### Testes
-- **157 testes unitários**: preços/combos (horário cruzando meia-noite, múltiplos conjuntos),
-  troco, formatação de cupom/vales, robustez de banco (round-trip, retomada de caixa, valores
-  extremos, estorno), config do cupom, exclusão com trava, versionamento do cardápio.
+### Corrigido
+- **Impressão de vales**: margem antes do 1º vale (não fica colado no cabeçalho) e sem
+  excesso de papel após o último vale.
+- **Anti-duplo-clique** nos botões "Imprimir teste" (Layout e Config Impressora): não
+  imprime duas vezes se o operador clicar rápido.
+
+### Testes e QA
+- **203 testes unitários** (subindo de 157): além dos anteriores, cobrem **permissões**
+  (defaults, regra fixa, persistência), **troca de operador** (fecha/abre turno, fundo),
+  **soma de notas** do pagamento, **auto-detecção de impressora** (USB>Bluetooth), **backup
+  automático** (agendador) e **dados do dashboard** (gaveta/faturamento/itens).
+- **QA em sandbox Hyper-V funcionando de ponta a ponta**: a bateria E2E roda **dentro de uma
+  VM descartável** (checkpoint → injeta → instala → testa na sessão interativa → extrai
+  screenshots → rollback), 5/6 aprovados + 1 skip de impressora, com evidências visuais reais
+  das telas (pagamento estilo PDV, painel em tempo real, histórico). Scripts em `qa/`.
 
 ## [2.3.0] — Fichas de vales, navegação por teclado e robustez de impressão
 

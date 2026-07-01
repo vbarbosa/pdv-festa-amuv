@@ -1,45 +1,50 @@
 # Status da execução da bateria E2E em Hyper-V
 
-## Situação neste ambiente (host atual)
+## ✅ Funcionando de ponta a ponta
 
-A bateria E2E em sandbox Hyper-V **não pôde ser EXECUTADA automaticamente** neste PC porque:
+A bateria E2E em sandbox Hyper-V **roda e passa** neste ambiente:
 
-| Bloqueio | Detalhe |
-|---|---|
-| Hyper-V não habilitado | O módulo PowerShell `Hyper-V` está ausente (`Get-VM` indisponível). |
-| Sem privilégio de admin | O ambiente de execução não é elevado e não pode acionar o UAC. |
-| Sem ISO do Windows | Nenhuma imagem de instalação encontrada para criar a VM base. |
-
-Habilitar o Hyper-V exige elevação **e reinício do Windows** — só pode ser feito por você.
-
-## O que está PRONTO (validado)
-
-- `New-PDVTestVM.ps1` e `Run-HyperVTests.ps1` — sintaxe validada pelo parser; o orquestrador
-  **detecta a ausência do Hyper-V e falha com mensagem clara** (não crasha).
-- E2E com screenshots por etapa e execução condicional (`EmSandbox`): rodam de verdade só
-  quando `PDV_E2E_EVID` está setada (dentro da VM), e são no-op fora (não travam o host).
-- Guia completo em `qa/README.md`.
-
-## Como habilitar e rodar (você, uma vez)
-
-```powershell
-# 1) habilitar o Hyper-V (PowerShell como Administrador) — REINICIA o Windows:
-Enable-WindowsOptionalFeature -Online -FeatureName Microsoft-Hyper-V-All -All
-
-# 2) depois do reboot, criar a VM base (precisa de um ISO do Windows):
-pwsh qa\New-PDVTestVM.ps1 -IsoPath "C:\ISOs\Windows11.iso"
-#    (instale o Windows na VM, crie o usuario 'pdv', deixe logado)
-pwsh qa\New-PDVTestVM.ps1 -Finalizar -GuestUser pdv -GuestPass pdv
-
-# 3) rodar a bateria E2E em sandbox (quantas vezes quiser):
-pwsh qa\Run-HyperVTests.ps1
-#    -> relatorio com screenshots em test-reports\<data-hora>\
+```
+[ ok ] VM pronta.
+[ ok ] Setup injetado.
+[ ok ] Binarios de teste E2E injetados.
+[ ok ] Execucao na VM concluida.
+[ ok ] 17 arquivo(s) de evidencia extraidos.
+[ ok ] VM base restaurada e virgem.
+ TESTES E2E (SANDBOX) OK   ->  5 aprovados, 1 skip (impressora), 0 falhas
 ```
 
-## Cobertura que FOI executada neste ambiente
+Evidências visuais geradas em `test-reports/<data-hora>/` (não versionadas): pagamento
+estilo PDV com troco, painel em tempo real (gaveta/faturamento/gráficos), histórico, carrinho
+com itens por venda, etc.
 
-- **157 testes unitários** (Core): passando. Cobrem preços/combos (incl. horário cruzando
-  meia-noite, múltiplos conjuntos), troco, formatação de cupom/vales, robustez de banco
-  (round-trip, retomada de caixa, valores extremos, estorno), config do cupom, exclusão com
-  trava e versionamento do cardápio.
-- **E2E**: compilam e são no-op seguro fora da sandbox (verificado). Prontos para a VM.
+## Setup que foi necessário (uma vez)
+
+1. **Hyper-V no Windows 11 Home**: habilitado via `qa/Habilitar-HyperV-no-Home.bat` (método
+   DISM da comunidade) + reboot.
+2. **VM base `PDV-Test-VM`**: criada com `qa/Criar-VM.bat` (Gen2, Secure Boot, vTPM) a partir
+   de um ISO x64 do Windows.
+3. **Windows instalado na VM** + usuário **local** `pdv` (senha `pdv`) — conta local é
+   obrigatória (o PowerShell Direct não usa conta Microsoft).
+4. **Finalização** com `qa/Preparar-SDK-e-Recongelar.bat`: habilita Guest Services, instala o
+   .NET 8 SDK na VM, configura **auto-login** do `pdv`, e congela o checkpoint `Base-Limpa`.
+
+## Como rodar a bateria (quantas vezes quiser)
+
+```powershell
+# como administrador:
+Start-Process ".\qa\Rodar-Testes-Sandbox.bat" -Verb RunAs
+```
+
+A VM roda **headless** (background, sem janela) e é **sempre revertida** ao estado limpo no
+fim. Relatório com screenshots em `test-reports/<data-hora>/`.
+
+## Detalhes técnicos que custaram caro (documentados para não repetir)
+
+- **Injeção via `Copy-Item -ToSession`** (não `Copy-VMFile`): este último falha com
+  `0x80070015` (Guest Service Interface frágil após boot).
+- **Testes na sessão interativa** via **tarefa agendada `/IT`**: rodar pelo PowerShell Direct
+  é não-interativo (`UserInteractive=false`) e os modais/FlaUI falham.
+- **App blindado** contra sessão não-interativa (`Program.cs`): o tratador de erro não pode
+  mostrar MessageBox cegamente, senão derruba o app em cascata ao reportar um erro.
+- **`schtasks /ST`** precisa de hora futura (recusa `00:00` no passado).
