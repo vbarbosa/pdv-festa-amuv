@@ -144,27 +144,42 @@ try {
         $env:PDVFESTA_DB = $null
         Remove-Item $dbSmoke,"$dbSmoke-wal","$dbSmoke-shm" -Force -ErrorAction SilentlyContinue
 
-        # roda a bateria FlaUI (se veio) apontando PDV_E2E_EVID para salvar screenshots.
+        # roda a bateria FlaUI na SESSAO INTERATIVA do usuario logado. Rodar direto pela
+        # sessao do PowerShell Direct e NAO-interativo (UserInteractive=false) -> os modais
+        # e o FlaUI falham. A tarefa agendada '/IT' executa no console interativo do 'pdv'.
         $dll = "C:\TempPDV\tests\PdvFesta.E2E.dll"
         if (Test-Path $dll) {
-            $env:PDV_E2E_EVID = "C:\TempPDV\evidencias"
-            L "Rodando E2E (FlaUI) com evidencias em $env:PDV_E2E_EVID ..."
-            # o SDK foi instalado em C:\dotnet (pode nao estar no PATH da sessao PSDirect).
             $dotnet = (Get-Command dotnet -ErrorAction SilentlyContinue).Source
             if (-not $dotnet -and (Test-Path "C:\dotnet\dotnet.exe")) { $dotnet = "C:\dotnet\dotnet.exe" }
             if ($dotnet) {
-                & $dotnet test $dll --nologo 2>&1 | Tee-Object -FilePath $log -Append
-                L "dotnet test exit=$LASTEXITCODE"
+                L "Rodando E2E (FlaUI) na SESSAO INTERATIVA via tarefa agendada..."
+                # script que a tarefa executa dentro da sessao interativa do usuario.
+                $runner = @"
+`$env:PDV_E2E_EVID='C:\TempPDV\evidencias'
+& '$dotnet' test 'C:\TempPDV\tests\PdvFesta.E2E.dll' --nologo *> 'C:\TempPDV\evidencias\dotnet-test.log'
+Set-Content 'C:\TempPDV\evidencias\test-exit.txt' `$LASTEXITCODE
+"@
+                Set-Content "C:\TempPDV\run-e2e.ps1" $runner -Encoding UTF8
+                Remove-Item "C:\TempPDV\evidencias\test-exit.txt" -Force -ErrorAction SilentlyContinue
+
+                schtasks /Create /TN "PDV_E2E" /TR "powershell -NoProfile -ExecutionPolicy Bypass -File C:\TempPDV\run-e2e.ps1" /SC ONCE /ST 00:00 /RL HIGHEST /IT /F | Out-Null
+                schtasks /Run /TN "PDV_E2E" | Out-Null
+
+                # espera a tarefa terminar (ate 5 min): sinal = test-exit.txt criado.
+                $fim = (Get-Date).AddMinutes(5)
+                while ((Get-Date) -lt $fim -and -not (Test-Path "C:\TempPDV\evidencias\test-exit.txt")) { Start-Sleep 5 }
+                schtasks /Delete /TN "PDV_E2E" /F | Out-Null
+
+                if (Test-Path "C:\TempPDV\evidencias\dotnet-test.log") {
+                    Get-Content "C:\TempPDV\evidencias\dotnet-test.log" | Tee-Object -FilePath $log -Append
+                }
+                $ec = (Get-Content "C:\TempPDV\evidencias\test-exit.txt" -ErrorAction SilentlyContinue)
+                L "dotnet test (sessao interativa) exit=$ec"
             } else {
-                # sem SDK na VM: usa o vstest console se existir; senao so smoke.
-                L "SDK dotnet ausente na VM; fazendo smoke test (abre o app 6s)."
-                $ap = Start-Process $exe -PassThru; Start-Sleep 6
-                if (-not $ap.HasExited) { $ap.Kill(); L "smoke OK (app abriu)" } else { L "smoke FALHOU (app fechou)" }
+                L "SDK dotnet ausente na VM; smoke ja rodou acima."
             }
         } else {
-            L "Sem DLL de teste; smoke test (abre o app 6s)."
-            $ap = Start-Process $exe -PassThru; Start-Sleep 6
-            if (-not $ap.HasExited) { $ap.Kill(); L "smoke OK" } else { L "smoke FALHOU" }
+            L "Sem DLL de teste (so o smoke acima)."
         }
         return @{ ok = $true; etapa = "concluido" }
     }
