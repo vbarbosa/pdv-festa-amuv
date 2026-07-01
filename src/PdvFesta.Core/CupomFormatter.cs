@@ -10,6 +10,18 @@ namespace PdvFesta.Core;
 public static class CupomFormatter
 {
     public const int LarguraPadrao = 32;
+    /// <summary>Largura util quando a fonte esta EXPANDIDA (dupla largura): metade das colunas.</summary>
+    public const int LarguraExpandida = 16;
+
+    /// <summary>Nome legivel da forma de pagamento para o cupom.</summary>
+    public static string NomeForma(FormaPagamento forma) => forma switch
+    {
+        FormaPagamento.Dinheiro => "DINHEIRO",
+        FormaPagamento.Pix => "PIX",
+        FormaPagamento.CartaoDebito => "CARTAO DEBITO",
+        FormaPagamento.CartaoCredito => "CARTAO CREDITO",
+        _ => "CARTAO"
+    };
 
     /// <summary>Formata centavos como "R$ 12,50".</summary>
     public static string Moeda(int centavos)
@@ -77,8 +89,6 @@ public static class CupomFormatter
         return linhas;
     }
 
-    private static readonly string[] NomesForma = { "DINHEIRO", "PIX", "CARTAO" };
-
     /// <summary>
     /// Monta o cupom completo (lista de linhas de texto, todas &lt;= largura).
     /// A parte grafica/ESC-POS (fonte grande, corte) fica na camada de impressao.
@@ -107,7 +117,7 @@ public static class CupomFormatter
 
         l.Add(Divisoria(largura));
         l.Add(LinhaItem("TOTAL", Moeda(venda.TotalCentavos), largura));
-        l.Add(LinhaItem("Pagamento", NomesForma[(int)venda.Forma], largura));
+        l.Add(LinhaItem("Pagamento", NomeForma(venda.Forma), largura));
 
         if (venda.Forma == FormaPagamento.Dinheiro)
         {
@@ -117,6 +127,157 @@ public static class CupomFormatter
 
         l.Add(Divisoria(largura));
         l.Add(Centralizar("Obrigado! Bom Arraia!", largura));
+
+        return l;
+    }
+
+    /// <summary>
+    /// Monta o ticket de consumo respeitando a <see cref="ConfigCupom"/>:
+    ///  - Completo: recibo com valores, total, pagamento e troco.
+    ///  - FichaConsumo: so quantidade + nome em fonte EXPANDIDA (16 col), sem valores;
+    ///    opcionalmente corta/separa uma ficha por item (barracas diferentes).
+    /// Retorna linhas com ESTILO (a camada ESC/POS traduz em bytes).
+    /// </summary>
+    public static List<LinhaCupom> MontarTicket(Venda venda, ConfigCupom cfg, int largura = LarguraPadrao)
+    {
+        return cfg.Modo == ModoCupom.FichaConsumo
+            ? MontarFicha(venda, cfg, largura)
+            : MontarReciboCompleto(venda, cfg, largura);
+    }
+
+    private static List<LinhaCupom> MontarReciboCompleto(Venda venda, ConfigCupom cfg, int largura)
+    {
+        var l = new List<LinhaCupom>();
+
+        if (!string.IsNullOrWhiteSpace(cfg.Evento))
+            l.Add(new LinhaCupom(cfg.Evento.Trim(), EstiloLinha.Titulo));
+        if (!string.IsNullOrWhiteSpace(cfg.Subtitulo))
+            l.Add(new LinhaCupom(Centralizar(cfg.Subtitulo.Trim(), largura)));
+
+        l.Add(new LinhaCupom(Centralizar("Cupom nao fiscal", largura)));
+        l.Add(new LinhaCupom(Divisoria(largura)));
+        l.Add(new LinhaCupom($"Venda #{venda.Id}"));
+        l.Add(new LinhaCupom($"Data: {venda.DataHora:dd/MM/yyyy HH:mm}"));
+        if (!string.IsNullOrWhiteSpace(venda.Operador))
+            l.Add(new LinhaCupom($"Operador: {venda.Operador}"));
+        l.Add(new LinhaCupom(Divisoria(largura)));
+
+        foreach (var item in venda.Itens)
+        {
+            l.Add(new LinhaCupom(LinhaItem(item.Nome, Moeda(item.SubtotalCentavos), largura)));
+            if (item.Quantidade > 1)
+                l.Add(new LinhaCupom($"  {item.Quantidade} x {Moeda(item.PrecoUnitarioCentavos)}"));
+        }
+
+        l.Add(new LinhaCupom(Divisoria(largura)));
+        l.Add(new LinhaCupom(LinhaItem("TOTAL", Moeda(venda.TotalCentavos), largura)));
+        l.Add(new LinhaCupom(LinhaItem("Pagamento", NomeForma(venda.Forma), largura)));
+
+        if (venda.Forma == FormaPagamento.Dinheiro)
+        {
+            l.Add(new LinhaCupom(LinhaItem("Recebido", Moeda(venda.RecebidoCentavos), largura)));
+            l.Add(new LinhaCupom(LinhaItem("Troco", Moeda(venda.TrocoCentavos), largura)));
+        }
+
+        l.Add(new LinhaCupom(Divisoria(largura)));
+        if (!string.IsNullOrWhiteSpace(cfg.Rodape))
+            foreach (var linha in Wrap(cfg.Rodape.Trim(), largura))
+                l.Add(new LinhaCupom(Centralizar(linha, largura)));
+
+        return l;
+    }
+
+    private static List<LinhaCupom> MontarFicha(Venda venda, ConfigCupom cfg, int largura)
+    {
+        var l = new List<LinhaCupom>();
+
+        if (!string.IsNullOrWhiteSpace(cfg.Evento))
+            l.Add(new LinhaCupom(cfg.Evento.Trim(), EstiloLinha.Titulo));
+
+        var itens = venda.Itens;
+        for (int idx = 0; idx < itens.Count; idx++)
+        {
+            var item = itens[idx];
+            // "2X BOLO DE MILHO" em fonte expandida (16 col) com quebra por palavra.
+            var texto = $"{item.Quantidade}X {item.Nome.ToUpperInvariant()}";
+            foreach (var linha in Wrap(texto, LarguraExpandida))
+                l.Add(new LinhaCupom(linha, EstiloLinha.Expandida));
+
+            bool ultimo = idx == itens.Count - 1;
+            if (!ultimo)
+            {
+                if (cfg.SepararPorItem)
+                    l.Add(LinhaCupom.CorteFicha);   // corta -> ficha separada por barraca
+                else
+                    l.Add(new LinhaCupom(""));       // so um respiro entre itens
+            }
+        }
+
+        if (!string.IsNullOrWhiteSpace(cfg.Rodape))
+        {
+            l.Add(new LinhaCupom(Divisoria(largura)));
+            foreach (var linha in Wrap(cfg.Rodape.Trim(), largura))
+                l.Add(new LinhaCupom(Centralizar(linha, largura)));
+        }
+
+        return l;
+    }
+
+    /// <summary>
+    /// Leitura Z (relatorio de fechamento de turno) para a bobina 58mm:
+    /// entradas por forma de pagamento, Total em Gaveta e itens vendidos (auditoria).
+    /// </summary>
+    public static List<LinhaCupom> MontarFechamentoZ(
+        ResumoTurno resumo, IEnumerable<ItemVendido> itens, ConfigCupom cfg, int largura = LarguraPadrao)
+    {
+        var l = new List<LinhaCupom>();
+        var t = resumo.Turno;
+        var v = resumo.Vendas;
+
+        l.Add(new LinhaCupom("FECHAMENTO DE CAIXA", EstiloLinha.Titulo));
+        l.Add(new LinhaCupom(Centralizar("Leitura Z", largura)));
+        if (!string.IsNullOrWhiteSpace(cfg.Evento))
+            l.Add(new LinhaCupom(Centralizar(cfg.Evento.Trim(), largura)));
+        l.Add(new LinhaCupom(Divisoria(largura)));
+
+        l.Add(new LinhaCupom($"Turno #{t.Id}"));
+        l.Add(new LinhaCupom($"Abertura: {t.Abertura:dd/MM HH:mm}"));
+        l.Add(new LinhaCupom($"Fechamento: {(t.Fechamento ?? DateTime.Now):dd/MM HH:mm}"));
+        if (!string.IsNullOrWhiteSpace(t.Operador))
+            l.Add(new LinhaCupom($"Operador: {t.Operador}"));
+        l.Add(new LinhaCupom(Divisoria(largura)));
+
+        l.Add(new LinhaCupom("ENTRADAS POR PAGAMENTO"));
+        l.Add(new LinhaCupom(LinhaItem("Dinheiro", Moeda(v.TotalDinheiroCentavos), largura)));
+        l.Add(new LinhaCupom(LinhaItem("Pix", Moeda(v.TotalPixCentavos), largura)));
+        l.Add(new LinhaCupom(LinhaItem("Cartao Debito", Moeda(v.TotalDebitoCentavos), largura)));
+        l.Add(new LinhaCupom(LinhaItem("Cartao Credito", Moeda(v.TotalCreditoCentavos), largura)));
+        l.Add(new LinhaCupom(Divisoria(largura)));
+        l.Add(new LinhaCupom(LinhaItem("VENDAS BRUTAS", Moeda(v.FaturamentoBrutoCentavos), largura)));
+        l.Add(new LinhaCupom(LinhaItem("Nº de vendas", v.QuantidadeVendas.ToString(), largura)));
+        l.Add(new LinhaCupom(Divisoria(largura)));
+
+        l.Add(new LinhaCupom("CONFERENCIA DA GAVETA"));
+        l.Add(new LinhaCupom(LinhaItem("Fundo inicial", Moeda(resumo.FundoCentavos), largura)));
+        l.Add(new LinhaCupom(LinhaItem("(+) Dinheiro", Moeda(v.TotalDinheiroCentavos), largura)));
+        l.Add(new LinhaCupom(LinhaItem("(+) Suprimentos", Moeda(resumo.SuprimentosCentavos), largura)));
+        l.Add(new LinhaCupom(LinhaItem("(-) Sangrias", Moeda(resumo.SangriasCentavos), largura)));
+        l.Add(new LinhaCupom(Divisoria(largura)));
+        l.Add(new LinhaCupom("TOTAL EM GAVETA", EstiloLinha.Titulo));
+        l.Add(new LinhaCupom(Centralizar(Moeda(resumo.TotalGavetaCentavos), largura)));
+        l.Add(new LinhaCupom(Divisoria(largura)));
+
+        var lista = itens as ICollection<ItemVendido> ?? itens.ToList();
+        if (lista.Count > 0)
+        {
+            l.Add(new LinhaCupom("ITENS VENDIDOS (auditoria)"));
+            foreach (var it in lista)
+                l.Add(new LinhaCupom(LinhaItem($"{it.Quantidade}x {it.Nome}", Moeda(it.TotalCentavos), largura)));
+            l.Add(new LinhaCupom(Divisoria(largura)));
+        }
+
+        l.Add(new LinhaCupom(Centralizar("Confira a gaveta!", largura)));
+        l.Add(new LinhaCupom(Centralizar($"{DateTime.Now:dd/MM/yyyy HH:mm}", largura)));
 
         return l;
     }
