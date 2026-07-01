@@ -4,9 +4,12 @@ using PdvFesta.Core;
 namespace PdvFesta.App;
 
 /// <summary>
-/// Tela de pagamento: escolhe forma (Dinheiro/Pix/Cartao) e, no dinheiro,
-/// digita o valor recebido para calcular o TROCO ao vivo.
-/// Atalhos: D=Dinheiro, P=Pix, C=Cartao, Enter=confirmar, Esc=voltar.
+/// Tela de pagamento. Escolhe a forma (Dinheiro/Pix/Debito/Credito):
+///  - Dinheiro: digita o recebido e ve o TROCO ao vivo; botoes de valor rapido
+///    (Exato, R$ 20/50/100) para agilizar.
+///  - Pix/Debito/Credito: valor ja vem PRE-PREENCHIDO com o total (troco zero).
+/// Anti-crash: se a impressora falhar, oferece Repetir/Ignorar (a venda ja foi salva).
+/// Atalhos: D=Dinheiro, P=Pix, B=Debito, C=Credito, Enter=confirmar, Esc=voltar.
 /// </summary>
 [SupportedOSPlatform("windows")]
 public sealed class FormPagamento : Form
@@ -14,12 +17,13 @@ public sealed class FormPagamento : Form
     private readonly Servico _servico;
     private FormaPagamento _forma = FormaPagamento.Dinheiro;
 
-    private readonly Label _lblTotal = new();
     private readonly Label _lblTroco = new();
     private readonly TextBox _txtRecebido = new();
+    private readonly FlowLayoutPanel _painelRapido = new();
     private readonly Button _btnDinheiro = new();
     private readonly Button _btnPix = new();
-    private readonly Button _btnCartao = new();
+    private readonly Button _btnDebito = new();
+    private readonly Button _btnCredito = new();
 
     private readonly int _totalCentavos;
 
@@ -34,7 +38,7 @@ public sealed class FormPagamento : Form
         StartPosition = FormStartPosition.CenterParent;
         FormBorderStyle = FormBorderStyle.FixedDialog;
         MaximizeBox = false; MinimizeBox = false;
-        ClientSize = new Size(460, 420);
+        ClientSize = new Size(480, 560);
         KeyPreview = true;
         Font = new Font("Segoe UI", 12F);
 
@@ -45,110 +49,148 @@ public sealed class FormPagamento : Form
 
     private void MontarLayout()
     {
-        _lblTotal.Text = "TOTAL: " + CupomFormatter.Moeda(_totalCentavos);
-        _lblTotal.Font = new Font("Segoe UI", 22F, FontStyle.Bold);
-        _lblTotal.ForeColor = Color.FromArgb(0, 100, 0);
-        _lblTotal.TextAlign = ContentAlignment.MiddleCenter;
-        _lblTotal.Dock = DockStyle.Top; _lblTotal.Height = 70;
+        var lblTotal = new Label
+        {
+            Text = "TOTAL: " + Dinheiro.Formatar(_totalCentavos),
+            Font = new Font("Segoe UI", 22F, FontStyle.Bold),
+            ForeColor = Color.FromArgb(0, 100, 0),
+            TextAlign = ContentAlignment.MiddleCenter, Dock = DockStyle.Top, Height = 64
+        };
 
+        // ---- formas de pagamento (4 colunas) ----
         var painelFormas = new TableLayoutPanel
         {
-            Dock = DockStyle.Top, Height = 80, ColumnCount = 3, RowCount = 1, Padding = new Padding(10)
+            Dock = DockStyle.Top, Height = 76, ColumnCount = 4, RowCount = 1, Padding = new Padding(8)
         };
-        for (int i = 0; i < 3; i++) painelFormas.ColumnStyles.Add(new ColumnStyle(SizeType.Percent, 33.3F));
-
+        for (int i = 0; i < 4; i++) painelFormas.ColumnStyles.Add(new ColumnStyle(SizeType.Percent, 25));
         ConfigBotaoForma(_btnDinheiro, "Dinheiro\n(D)", FormaPagamento.Dinheiro);
         ConfigBotaoForma(_btnPix, "Pix\n(P)", FormaPagamento.Pix);
-        ConfigBotaoForma(_btnCartao, "Cartao\n(C)", FormaPagamento.Cartao);
+        ConfigBotaoForma(_btnDebito, "Debito\n(B)", FormaPagamento.CartaoDebito);
+        ConfigBotaoForma(_btnCredito, "Credito\n(C)", FormaPagamento.CartaoCredito);
         painelFormas.Controls.Add(_btnDinheiro, 0, 0);
         painelFormas.Controls.Add(_btnPix, 1, 0);
-        painelFormas.Controls.Add(_btnCartao, 2, 0);
+        painelFormas.Controls.Add(_btnDebito, 2, 0);
+        painelFormas.Controls.Add(_btnCredito, 3, 0);
 
         var lblRec = new Label
         {
-            Text = "Valor recebido (R$):", Dock = DockStyle.Top, Height = 30,
+            Text = "Valor recebido (R$):", Dock = DockStyle.Top, Height = 28,
             TextAlign = ContentAlignment.MiddleLeft, Padding = new Padding(12, 0, 0, 0)
         };
         _txtRecebido.Name = "txtRecebido";
         _txtRecebido.Dock = DockStyle.Top;
-        _txtRecebido.Font = new Font("Segoe UI", 20F, FontStyle.Bold);
+        _txtRecebido.Font = new Font("Segoe UI", 22F, FontStyle.Bold);
         _txtRecebido.TextAlign = HorizontalAlignment.Right;
-        _txtRecebido.Margin = new Padding(12);
         _txtRecebido.TextChanged += (s, e) => AtualizarTroco();
 
-        _lblTroco.Dock = DockStyle.Top; _lblTroco.Height = 70;
-        _lblTroco.Font = new Font("Segoe UI", 24F, FontStyle.Bold);
+        // ---- botoes de valor rapido ----
+        _painelRapido.Dock = DockStyle.Top;
+        _painelRapido.Height = 96;
+        _painelRapido.Padding = new Padding(8);
+        _painelRapido.AutoScroll = true;
+        _painelRapido.Controls.Add(BotaoRapido("Exato", _totalCentavos));
+        foreach (var nota in new[] { 1000, 2000, 5000, 10000, 20000 })
+            if (nota >= _totalCentavos || nota == 2000 || nota == 5000)
+                _painelRapido.Controls.Add(BotaoRapido(Dinheiro.Formatar(nota).Replace("R$ ", "R$"), nota));
+
+        _lblTroco.Dock = DockStyle.Top; _lblTroco.Height = 72;
+        _lblTroco.Font = new Font("Segoe UI", 26F, FontStyle.Bold);
         _lblTroco.TextAlign = ContentAlignment.MiddleCenter;
         _lblTroco.ForeColor = Color.FromArgb(0, 0, 150);
+        _lblTroco.Name = "lblTroco";
 
         var btnOk = new Button
         {
             Name = "btnConfirmar",
-            Text = "CONFIRMAR (Enter)", Dock = DockStyle.Bottom, Height = 60,
+            Text = "CONFIRMAR (Enter)", Dock = DockStyle.Bottom, Height = 64,
             BackColor = Color.FromArgb(0, 150, 0), ForeColor = Color.White,
-            FlatStyle = FlatStyle.Flat, Font = new Font("Segoe UI", 14F, FontStyle.Bold)
+            FlatStyle = FlatStyle.Flat, Font = new Font("Segoe UI", 15F, FontStyle.Bold)
         };
         btnOk.Click += (s, e) => Confirmar();
 
-        // Ordem de Dock (adiciona de baixo pra cima)
+        // Dock: adiciona de baixo pra cima
         Controls.Add(_lblTroco);
+        Controls.Add(_painelRapido);
         Controls.Add(_txtRecebido);
         Controls.Add(lblRec);
         Controls.Add(painelFormas);
-        Controls.Add(_lblTotal);
+        Controls.Add(lblTotal);
         Controls.Add(btnOk);
     }
 
     private void ConfigBotaoForma(Button b, string texto, FormaPagamento forma)
     {
-        b.Text = texto; b.Dock = DockStyle.Fill; b.FlatStyle = FlatStyle.Flat;
-        b.Font = new Font("Segoe UI", 12F, FontStyle.Bold); b.TabStop = false;
+        b.Text = texto; b.Dock = DockStyle.Fill; b.FlatStyle = FlatStyle.Flat; b.Margin = new Padding(4);
+        b.Font = new Font("Segoe UI", 11F, FontStyle.Bold); b.TabStop = false;
         b.Click += (s, e) => SelecionarForma(forma);
+    }
+
+    private Button BotaoRapido(string texto, int centavos)
+    {
+        var b = new Button
+        {
+            Text = texto, Width = 84, Height = 40, Margin = new Padding(4),
+            FlatStyle = FlatStyle.Flat, Font = new Font("Segoe UI", 11F, FontStyle.Bold),
+            BackColor = Color.FromArgb(235, 235, 235), TabStop = false
+        };
+        b.Click += (s, e) =>
+        {
+            _txtRecebido.Text = (centavos / 100m).ToString("0.00", System.Globalization.CultureInfo.GetCultureInfo("pt-BR"));
+            _txtRecebido.Focus(); _txtRecebido.SelectAll();
+        };
+        return b;
     }
 
     private void SelecionarForma(FormaPagamento forma)
     {
         _forma = forma;
-        _btnDinheiro.BackColor = forma == FormaPagamento.Dinheiro ? Color.FromArgb(0, 150, 0) : Color.Gainsboro;
-        _btnDinheiro.ForeColor = forma == FormaPagamento.Dinheiro ? Color.White : Color.Black;
-        _btnPix.BackColor = forma == FormaPagamento.Pix ? Color.FromArgb(0, 150, 0) : Color.Gainsboro;
-        _btnPix.ForeColor = forma == FormaPagamento.Pix ? Color.White : Color.Black;
-        _btnCartao.BackColor = forma == FormaPagamento.Cartao ? Color.FromArgb(0, 150, 0) : Color.Gainsboro;
-        _btnCartao.ForeColor = forma == FormaPagamento.Cartao ? Color.White : Color.Black;
+        Realcar(_btnDinheiro, forma == FormaPagamento.Dinheiro);
+        Realcar(_btnPix, forma == FormaPagamento.Pix);
+        Realcar(_btnDebito, forma == FormaPagamento.CartaoDebito);
+        Realcar(_btnCredito, forma == FormaPagamento.CartaoCredito);
 
         bool dinheiro = forma == FormaPagamento.Dinheiro;
         _txtRecebido.Enabled = dinheiro;
-        if (dinheiro) { _txtRecebido.Focus(); _txtRecebido.SelectAll(); }
+        _painelRapido.Visible = dinheiro;
+
+        if (dinheiro)
+        {
+            _txtRecebido.Text = "";
+            _txtRecebido.Focus();
+        }
+        else
+        {
+            // Pix/Debito/Credito: valor ja pre-preenchido com o total (troco zero).
+            _txtRecebido.Text = (_totalCentavos / 100m).ToString("0.00", System.Globalization.CultureInfo.GetCultureInfo("pt-BR"));
+        }
         AtualizarTroco();
     }
 
-    private int? RecebidoCentavos()
+    private static void Realcar(Button b, bool ativo)
     {
-        var txt = _txtRecebido.Text.Trim().Replace("R$", "").Replace(" ", "").Replace(".", "").Replace(',', '.');
-        if (decimal.TryParse(txt, System.Globalization.NumberStyles.Any,
-                System.Globalization.CultureInfo.InvariantCulture, out var reais))
-            return (int)Math.Round(reais * 100);
-        return null;
+        b.BackColor = ativo ? Color.FromArgb(0, 150, 0) : Color.Gainsboro;
+        b.ForeColor = ativo ? Color.White : Color.Black;
     }
 
     private void AtualizarTroco()
     {
         if (_forma != FormaPagamento.Dinheiro)
         {
-            _lblTroco.Text = "";
+            _lblTroco.ForeColor = Color.FromArgb(0, 100, 0);
+            _lblTroco.Text = "Troco: R$ 0,00";
             return;
         }
-        var rec = RecebidoCentavos();
+        var rec = Dinheiro.ParseCentavos(_txtRecebido.Text);
         if (rec is null) { _lblTroco.Text = ""; return; }
         if (rec < _totalCentavos)
         {
             _lblTroco.ForeColor = Color.FromArgb(180, 0, 0);
-            _lblTroco.Text = "Falta " + CupomFormatter.Moeda(_totalCentavos - rec.Value);
+            _lblTroco.Text = "Falta " + Dinheiro.Formatar(_totalCentavos - rec.Value);
         }
         else
         {
             _lblTroco.ForeColor = Color.FromArgb(0, 0, 150);
-            _lblTroco.Text = "TROCO: " + CupomFormatter.Moeda(rec.Value - _totalCentavos);
+            _lblTroco.Text = "TROCO: " + Dinheiro.Formatar(rec.Value - _totalCentavos);
         }
     }
 
@@ -158,7 +200,8 @@ public sealed class FormPagamento : Form
         {
             case Keys.D: SelecionarForma(FormaPagamento.Dinheiro); e.Handled = true; break;
             case Keys.P: SelecionarForma(FormaPagamento.Pix); e.Handled = true; break;
-            case Keys.C: SelecionarForma(FormaPagamento.Cartao); e.Handled = true; break;
+            case Keys.B: SelecionarForma(FormaPagamento.CartaoDebito); e.Handled = true; break;
+            case Keys.C: SelecionarForma(FormaPagamento.CartaoCredito); e.Handled = true; break;
             case Keys.Enter: Confirmar(); e.Handled = true; break;
             case Keys.Escape: DialogResult = DialogResult.Cancel; Close(); break;
         }
@@ -169,7 +212,7 @@ public sealed class FormPagamento : Form
         int recebido = 0;
         if (_forma == FormaPagamento.Dinheiro)
         {
-            var rec = RecebidoCentavos();
+            var rec = Dinheiro.ParseCentavos(_txtRecebido.Text);
             if (rec is null || rec < _totalCentavos)
             {
                 MessageBox.Show("Valor recebido insuficiente para o troco.", "Pagamento",
@@ -180,16 +223,43 @@ public sealed class FormPagamento : Form
             recebido = rec.Value;
         }
 
+        Venda venda;
+        bool impressaoOk; string impressaoMsg;
         try
         {
-            _servico.FinalizarVenda(_forma, recebido, operador: "");
-            DialogResult = DialogResult.OK;
-            Close();
+            (venda, impressaoOk, impressaoMsg) = _servico.FinalizarVenda(_forma, recebido, operador: "");
         }
         catch (Exception ex)
         {
-            MessageBox.Show("Erro ao finalizar: " + ex.Message, "Pagamento",
+            MessageBox.Show("Erro ao finalizar a venda: " + ex.Message, "Pagamento",
                 MessageBoxButtons.OK, MessageBoxIcon.Error);
+            return;
+        }
+
+        // Anti-crash da impressora: a venda JA foi salva; oferece reimprimir.
+        if (!impressaoOk)
+            OfferecerReimpressao(venda, impressaoMsg);
+
+        DialogResult = DialogResult.OK;
+        Close();
+    }
+
+    /// <summary>Loop amigavel de reimpressao (Repetir/Ignorar) sem nunca crashar.</summary>
+    private void OfferecerReimpressao(Venda venda, string msg)
+    {
+        while (true)
+        {
+            var r = MessageBox.Show(
+                "Erro na impressora. Verifique o cabo e o papel.\n" +
+                "A VENDA FOI REGISTRADA no sistema normalmente.\n\n" +
+                $"Detalhe: {msg}\n\nDeseja tentar imprimir novamente?",
+                "Impressora", MessageBoxButtons.RetryCancel, MessageBoxIcon.Warning);
+
+            if (r != DialogResult.Retry) return;      // Ignorar
+
+            var (ok, novaMsg) = _servico.ImprimirVenda(venda);
+            if (ok) return;                           // imprimiu -> sai
+            msg = novaMsg;                            // falhou de novo -> repete o prompt
         }
     }
 }

@@ -56,8 +56,29 @@ CREATE TABLE IF NOT EXISTS vendas (
     forma         INTEGER NOT NULL,
     recebido_cent INTEGER NOT NULL DEFAULT 0,
     troco_cent    INTEGER NOT NULL DEFAULT 0,
-    operador      TEXT NOT NULL DEFAULT ''
+    operador      TEXT NOT NULL DEFAULT '',
+    caixa_id      INTEGER NULL
 );
+
+CREATE TABLE IF NOT EXISTS caixa (
+    id          INTEGER PRIMARY KEY AUTOINCREMENT,
+    abertura    TEXT NOT NULL,
+    fechamento  TEXT NULL,
+    fundo_cent  INTEGER NOT NULL DEFAULT 0,
+    operador    TEXT NOT NULL DEFAULT '',
+    status      INTEGER NOT NULL DEFAULT 0   -- 0=Aberto, 1=Fechado
+);
+
+CREATE TABLE IF NOT EXISTS caixa_mov (
+    id          INTEGER PRIMARY KEY AUTOINCREMENT,
+    caixa_id    INTEGER NOT NULL,
+    tipo        INTEGER NOT NULL,            -- 0=Sangria, 1=Suprimento
+    valor_cent  INTEGER NOT NULL,
+    motivo      TEXT NOT NULL DEFAULT '',
+    data_hora   TEXT NOT NULL
+);
+CREATE INDEX IF NOT EXISTS ix_mov_caixa ON caixa_mov(caixa_id);
+CREATE INDEX IF NOT EXISTS ix_vendas_caixa ON vendas(caixa_id);
 
 CREATE TABLE IF NOT EXISTS venda_itens (
     id            INTEGER PRIMARY KEY AUTOINCREMENT,
@@ -73,8 +94,39 @@ CREATE INDEX IF NOT EXISTS ix_itens_venda ON venda_itens(venda_id);
 CREATE TABLE IF NOT EXISTS config (
     chave  TEXT PRIMARY KEY,
     valor  TEXT NOT NULL
+);
+
+CREATE TABLE IF NOT EXISTS categorias (
+    nome   TEXT PRIMARY KEY,
+    ordem  INTEGER NOT NULL DEFAULT 0,
+    ativo  INTEGER NOT NULL DEFAULT 1
 );";
         cmd.ExecuteNonQuery();
+
+        MigrarColunaCaixaId(conn);
+    }
+
+    /// <summary>
+    /// Migracao suave: bancos criados antes dos turnos nao tem a coluna vendas.caixa_id.
+    /// Adiciona se faltar (SQLite ALTER TABLE ADD COLUMN), preservando o historico.
+    /// </summary>
+    private static void MigrarColunaCaixaId(SqliteConnection conn)
+    {
+        bool existe = false;
+        using (var check = conn.CreateCommand())
+        {
+            check.CommandText = "PRAGMA table_info(vendas);";
+            using var r = check.ExecuteReader();
+            while (r.Read())
+                if (string.Equals(r.GetString(1), "caixa_id", StringComparison.OrdinalIgnoreCase))
+                    existe = true;
+        }
+        if (!existe)
+        {
+            using var alter = conn.CreateCommand();
+            alter.CommandText = "ALTER TABLE vendas ADD COLUMN caixa_id INTEGER NULL;";
+            alter.ExecuteNonQuery();
+        }
     }
 
     // ---------- CONFIG (chave/valor) ----------
@@ -123,8 +175,8 @@ ON CONFLICT(chave) DO UPDATE SET valor = excluded.valor;";
         {
             cmd.Transaction = tx;
             cmd.CommandText = @"
-INSERT INTO vendas (data_hora, total_cent, forma, recebido_cent, troco_cent, operador)
-VALUES ($dh, $total, $forma, $rec, $troco, $op);
+INSERT INTO vendas (data_hora, total_cent, forma, recebido_cent, troco_cent, operador, caixa_id)
+VALUES ($dh, $total, $forma, $rec, $troco, $op, $caixa);
 SELECT last_insert_rowid();";
             cmd.Parameters.AddWithValue("$dh", venda.DataHora.ToString("o"));
             cmd.Parameters.AddWithValue("$total", venda.TotalCentavos);
@@ -132,6 +184,7 @@ SELECT last_insert_rowid();";
             cmd.Parameters.AddWithValue("$rec", venda.RecebidoCentavos);
             cmd.Parameters.AddWithValue("$troco", venda.TrocoCentavos);
             cmd.Parameters.AddWithValue("$op", venda.Operador);
+            cmd.Parameters.AddWithValue("$caixa", (object?)venda.CaixaId ?? DBNull.Value);
             vendaId = (long)(cmd.ExecuteScalar() ?? 0L);
         }
 
@@ -162,7 +215,7 @@ VALUES ($vid, $pid, $nome, $preco, $qtd);";
 
         using (var cmd = conn.CreateCommand())
         {
-            cmd.CommandText = "SELECT id, data_hora, total_cent, forma, recebido_cent, troco_cent, operador FROM vendas ORDER BY id;";
+            cmd.CommandText = "SELECT id, data_hora, total_cent, forma, recebido_cent, troco_cent, operador, caixa_id FROM vendas ORDER BY id;";
             using var r = cmd.ExecuteReader();
             while (r.Read())
             {
@@ -174,7 +227,8 @@ VALUES ($vid, $pid, $nome, $preco, $qtd);";
                     Forma = (FormaPagamento)r.GetInt32(3),
                     RecebidoCentavos = r.GetInt32(4),
                     TrocoCentavos = r.GetInt32(5),
-                    Operador = r.GetString(6)
+                    Operador = r.GetString(6),
+                    CaixaId = r.IsDBNull(7) ? null : r.GetInt64(7)
                 };
                 vendas[v.Id] = v;
             }
@@ -308,6 +362,222 @@ VALUES ($vid, $pid, $nome, $preco, $qtd);";
         }
         tx.Commit();
     }
+
+    // ---------- CRUD DE PRODUTO (parametrizado; sem SQL injection) ----------
+
+    /// <summary>Insere ou atualiza UM produto pelo Id (upsert). Preserva o historico.</summary>
+    public void SalvarProduto(Produto p)
+    {
+        using var conn = Abrir();
+        using var cmd = conn.CreateCommand();
+        cmd.CommandText = @"
+INSERT INTO produtos (id, nome, preco_cent, categoria, atalho, ativo, composicao)
+VALUES ($id, $nome, $preco, $cat, $atalho, $ativo, $comp)
+ON CONFLICT(id) DO UPDATE SET
+    nome = excluded.nome, preco_cent = excluded.preco_cent, categoria = excluded.categoria,
+    atalho = excluded.atalho, ativo = excluded.ativo, composicao = excluded.composicao;";
+        cmd.Parameters.AddWithValue("$id", p.Id);
+        cmd.Parameters.AddWithValue("$nome", p.Nome);
+        cmd.Parameters.AddWithValue("$preco", p.PrecoCentavos);
+        cmd.Parameters.AddWithValue("$cat", p.Categoria);
+        cmd.Parameters.AddWithValue("$atalho", p.Atalho);
+        cmd.Parameters.AddWithValue("$ativo", p.Ativo ? 1 : 0);
+        cmd.Parameters.AddWithValue("$comp", ComboSerializer.Serializar(p.Composicao));
+        cmd.ExecuteNonQuery();
+    }
+
+    /// <summary>
+    /// SOFT DELETE: apenas marca ativo=0. NUNCA apaga o registro, para nao quebrar o
+    /// historico financeiro (vendas antigas continuam referenciando o produto).
+    /// </summary>
+    public void InativarProduto(string id)
+    {
+        using var conn = Abrir();
+        using var cmd = conn.CreateCommand();
+        cmd.CommandText = "UPDATE produtos SET ativo = 0 WHERE id = $id;";
+        cmd.Parameters.AddWithValue("$id", id);
+        cmd.ExecuteNonQuery();
+    }
+
+    /// <summary>True se o produto ja aparece em alguma venda (nao pode ser apagado de vez).</summary>
+    public bool ProdutoTemVendas(string id)
+    {
+        using var conn = Abrir();
+        using var cmd = conn.CreateCommand();
+        cmd.CommandText = "SELECT EXISTS(SELECT 1 FROM venda_itens WHERE produto_id = $id);";
+        cmd.Parameters.AddWithValue("$id", id);
+        return Convert.ToInt64(cmd.ExecuteScalar() ?? 0L) == 1;
+    }
+
+    /// <summary>True se o Id de produto ja existe no catalogo.</summary>
+    public bool ProdutoExiste(string id)
+    {
+        using var conn = Abrir();
+        using var cmd = conn.CreateCommand();
+        cmd.CommandText = "SELECT EXISTS(SELECT 1 FROM produtos WHERE id = $id);";
+        cmd.Parameters.AddWithValue("$id", id);
+        return Convert.ToInt64(cmd.ExecuteScalar() ?? 0L) == 1;
+    }
+
+    // ---------- CATEGORIAS ----------
+
+    /// <summary>Lista categorias ordenadas por Ordem, depois Nome. Ativas por padrao.</summary>
+    public List<Categoria> ListarCategorias(bool incluirInativas = false)
+    {
+        using var conn = Abrir();
+        using var cmd = conn.CreateCommand();
+        cmd.CommandText = incluirInativas
+            ? "SELECT nome, ordem, ativo FROM categorias ORDER BY ordem, nome;"
+            : "SELECT nome, ordem, ativo FROM categorias WHERE ativo = 1 ORDER BY ordem, nome;";
+        var lista = new List<Categoria>();
+        using var r = cmd.ExecuteReader();
+        while (r.Read())
+            lista.Add(new Categoria { Nome = r.GetString(0), Ordem = r.GetInt32(1), Ativo = r.GetInt32(2) == 1 });
+        return lista;
+    }
+
+    /// <summary>Insere ou atualiza uma categoria (upsert pelo Nome).</summary>
+    public void SalvarCategoria(Categoria c)
+    {
+        using var conn = Abrir();
+        using var cmd = conn.CreateCommand();
+        cmd.CommandText = @"
+INSERT INTO categorias (nome, ordem, ativo) VALUES ($n, $o, $a)
+ON CONFLICT(nome) DO UPDATE SET ordem = excluded.ordem, ativo = excluded.ativo;";
+        cmd.Parameters.AddWithValue("$n", c.Nome);
+        cmd.Parameters.AddWithValue("$o", c.Ordem);
+        cmd.Parameters.AddWithValue("$a", c.Ativo ? 1 : 0);
+        cmd.ExecuteNonQuery();
+    }
+
+    /// <summary>Soft delete de categoria (oculta a aba, nao apaga os produtos).</summary>
+    public void InativarCategoria(string nome)
+    {
+        using var conn = Abrir();
+        using var cmd = conn.CreateCommand();
+        cmd.CommandText = "UPDATE categorias SET ativo = 0 WHERE nome = $n;";
+        cmd.Parameters.AddWithValue("$n", nome);
+        cmd.ExecuteNonQuery();
+    }
+
+    /// <summary>Semeia categorias (na ordem dada) somente se a tabela estiver vazia.</summary>
+    public void SemearCategoriasSeVazio(IEnumerable<string> nomesEmOrdem)
+    {
+        using var conn = Abrir();
+        using (var check = conn.CreateCommand())
+        {
+            check.CommandText = "SELECT COUNT(*) FROM categorias;";
+            if (Convert.ToInt64(check.ExecuteScalar() ?? 0L) > 0) return;
+        }
+        using var tx = conn.BeginTransaction();
+        int ordem = 0;
+        foreach (var nome in nomesEmOrdem)
+        {
+            using var cmd = conn.CreateCommand();
+            cmd.Transaction = tx;
+            cmd.CommandText = "INSERT OR IGNORE INTO categorias (nome, ordem, ativo) VALUES ($n, $o, 1);";
+            cmd.Parameters.AddWithValue("$n", nome);
+            cmd.Parameters.AddWithValue("$o", ordem++);
+            cmd.ExecuteNonQuery();
+        }
+        tx.Commit();
+    }
+
+    // ---------- TURNOS DE CAIXA ----------
+
+    /// <summary>Abre um novo turno e retorna com o Id gerado.</summary>
+    public Turno AbrirCaixa(int fundoCentavos, string operador)
+    {
+        using var conn = Abrir();
+        using var cmd = conn.CreateCommand();
+        cmd.CommandText = @"
+INSERT INTO caixa (abertura, fundo_cent, operador, status)
+VALUES ($ab, $fundo, $op, 0);
+SELECT last_insert_rowid();";
+        var abertura = DateTime.Now;
+        cmd.Parameters.AddWithValue("$ab", abertura.ToString("o"));
+        cmd.Parameters.AddWithValue("$fundo", fundoCentavos);
+        cmd.Parameters.AddWithValue("$op", operador);
+        var id = (long)(cmd.ExecuteScalar() ?? 0L);
+        return new Turno { Id = id, Abertura = abertura, FundoCentavos = fundoCentavos, Operador = operador };
+    }
+
+    /// <summary>Fecha o turno (status=1, grava data de fechamento).</summary>
+    public void FecharCaixa(long caixaId)
+    {
+        using var conn = Abrir();
+        using var cmd = conn.CreateCommand();
+        cmd.CommandText = "UPDATE caixa SET status = 1, fechamento = $f WHERE id = $id;";
+        cmd.Parameters.AddWithValue("$f", DateTime.Now.ToString("o"));
+        cmd.Parameters.AddWithValue("$id", caixaId);
+        cmd.ExecuteNonQuery();
+    }
+
+    /// <summary>Retorna o turno ABERTO mais recente, ou null se o caixa esta fechado.</summary>
+    public Turno? CaixaAberto()
+    {
+        using var conn = Abrir();
+        using var cmd = conn.CreateCommand();
+        cmd.CommandText = @"
+SELECT id, abertura, fechamento, fundo_cent, operador, status
+FROM caixa WHERE status = 0 ORDER BY id DESC LIMIT 1;";
+        using var r = cmd.ExecuteReader();
+        return r.Read() ? LerTurno(r) : null;
+    }
+
+    private static Turno LerTurno(SqliteDataReader r) => new()
+    {
+        Id = r.GetInt64(0),
+        Abertura = DateTime.Parse(r.GetString(1), null, System.Globalization.DateTimeStyles.RoundtripKind),
+        Fechamento = r.IsDBNull(2) ? null : DateTime.Parse(r.GetString(2), null, System.Globalization.DateTimeStyles.RoundtripKind),
+        FundoCentavos = r.GetInt32(3),
+        Operador = r.GetString(4),
+        Status = (StatusCaixa)r.GetInt32(5)
+    };
+
+    /// <summary>Registra uma sangria/suprimento no turno.</summary>
+    public void RegistrarMovimento(MovimentoCaixa mov)
+    {
+        using var conn = Abrir();
+        using var cmd = conn.CreateCommand();
+        cmd.CommandText = @"
+INSERT INTO caixa_mov (caixa_id, tipo, valor_cent, motivo, data_hora)
+VALUES ($cx, $tipo, $valor, $motivo, $dh);";
+        cmd.Parameters.AddWithValue("$cx", mov.CaixaId);
+        cmd.Parameters.AddWithValue("$tipo", (int)mov.Tipo);
+        cmd.Parameters.AddWithValue("$valor", mov.ValorCentavos);
+        cmd.Parameters.AddWithValue("$motivo", mov.Motivo);
+        cmd.Parameters.AddWithValue("$dh", mov.DataHora.ToString("o"));
+        cmd.ExecuteNonQuery();
+    }
+
+    /// <summary>Lista os movimentos (sangria/suprimento) de um turno.</summary>
+    public List<MovimentoCaixa> ListarMovimentos(long caixaId)
+    {
+        using var conn = Abrir();
+        using var cmd = conn.CreateCommand();
+        cmd.CommandText = @"
+SELECT id, caixa_id, tipo, valor_cent, motivo, data_hora
+FROM caixa_mov WHERE caixa_id = $cx ORDER BY id;";
+        cmd.Parameters.AddWithValue("$cx", caixaId);
+        var lista = new List<MovimentoCaixa>();
+        using var r = cmd.ExecuteReader();
+        while (r.Read())
+            lista.Add(new MovimentoCaixa
+            {
+                Id = r.GetInt64(0),
+                CaixaId = r.GetInt64(1),
+                Tipo = (TipoMovimento)r.GetInt32(2),
+                ValorCentavos = r.GetInt32(3),
+                Motivo = r.GetString(4),
+                DataHora = DateTime.Parse(r.GetString(5), null, System.Globalization.DateTimeStyles.RoundtripKind)
+            });
+        return lista;
+    }
+
+    /// <summary>Vendas de um turno especifico (para o fechamento Z).</summary>
+    public List<Venda> ListarVendasPorCaixa(long caixaId) =>
+        ListarVendas().Where(v => v.CaixaId == caixaId).ToList();
 
     public void Dispose()
     {

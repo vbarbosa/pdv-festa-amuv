@@ -4,10 +4,9 @@ using PdvFesta.Core;
 namespace PdvFesta.App;
 
 /// <summary>
-/// Janela flutuante de gestao da impressora termica (aberta com F12).
-///  - Lista impressoras instaladas + portas COM ativas.
-///  - Salva a escolhida no SQLite (persistente entre aberturas).
-///  - Botao "Imprimir Teste" que manda ESC/POS RAW (Status OK) + corte.
+/// Gestao da impressora termica (F12). Lista impressoras + portas COM, salva a
+/// escolhida no SQLite e imprime um cupom de teste (ESC/POS RAW + corte).
+/// Layout 100% ancorado (Dock/TableLayoutPanel), sem coordenadas fixas.
 /// </summary>
 [SupportedOSPlatform("windows")]
 public sealed class FormPrinterConfig : Form
@@ -21,11 +20,12 @@ public sealed class FormPrinterConfig : Form
         _servico = servico;
 
         Text = "Configuracao da Impressora";
+        Name = "FormPrinterConfig";
         Icon = Marca.Icone();
         StartPosition = FormStartPosition.CenterParent;
-        FormBorderStyle = FormBorderStyle.FixedDialog;   // flutuante/destacavel
+        FormBorderStyle = FormBorderStyle.FixedDialog;
         MaximizeBox = false; MinimizeBox = false;
-        ClientSize = new Size(520, 260);
+        ClientSize = new Size(560, 300);
         Font = new Font("Segoe UI", 11F);
 
         MontarLayout();
@@ -34,25 +34,37 @@ public sealed class FormPrinterConfig : Form
 
     private void MontarLayout()
     {
-        var lbl = new Label
+        var raiz = new TableLayoutPanel
         {
-            Text = "Impressora / Porta:", Location = new Point(20, 20),
-            AutoSize = true
+            Dock = DockStyle.Fill, ColumnCount = 2, RowCount = 4, Padding = new Padding(16)
         };
-        _cmb.Location = new Point(20, 50);
-        _cmb.Width = 380;
+        raiz.ColumnStyles.Add(new ColumnStyle(SizeType.Percent, 78));
+        raiz.ColumnStyles.Add(new ColumnStyle(SizeType.Percent, 22));
+        raiz.RowStyles.Add(new RowStyle(SizeType.Absolute, 30));
+        raiz.RowStyles.Add(new RowStyle(SizeType.Absolute, 46));
+        raiz.RowStyles.Add(new RowStyle(SizeType.Absolute, 70));
+        raiz.RowStyles.Add(new RowStyle(SizeType.Percent, 100));
+
+        var lbl = new Label { Text = "Impressora / Porta:", Dock = DockStyle.Fill, TextAlign = ContentAlignment.MiddleLeft };
+        raiz.Controls.Add(lbl, 0, 0);
+        raiz.SetColumnSpan(lbl, 2);
+
+        _cmb.Dock = DockStyle.Fill;
         _cmb.DropDownStyle = ComboBoxStyle.DropDownList;
         _cmb.Font = new Font("Segoe UI", 12F);
+        raiz.Controls.Add(_cmb, 0, 1);
 
-        var btnAtualizar = new Button
-        {
-            Text = "Atualizar", Location = new Point(410, 49), Width = 90, Height = 30
-        };
+        var btnAtualizar = new Button { Text = "Atualizar", Dock = DockStyle.Fill, Margin = new Padding(6, 0, 0, 0) };
         btnAtualizar.Click += (s, e) => CarregarLista();
+        raiz.Controls.Add(btnAtualizar, 1, 1);
+
+        var barra = new TableLayoutPanel { Dock = DockStyle.Fill, ColumnCount = 2, RowCount = 1 };
+        barra.ColumnStyles.Add(new ColumnStyle(SizeType.Percent, 50));
+        barra.ColumnStyles.Add(new ColumnStyle(SizeType.Percent, 50));
 
         var btnSalvar = new Button
         {
-            Text = "Salvar Configuracao", Location = new Point(20, 100), Width = 230, Height = 55,
+            Text = "Salvar Configuracao", Dock = DockStyle.Fill, Margin = new Padding(0, 8, 6, 8),
             BackColor = Color.FromArgb(0, 120, 200), ForeColor = Color.White,
             FlatStyle = FlatStyle.Flat, Font = new Font("Segoe UI", 12F, FontStyle.Bold)
         };
@@ -60,17 +72,23 @@ public sealed class FormPrinterConfig : Form
 
         var btnTeste = new Button
         {
-            Text = "Imprimir Teste", Location = new Point(270, 100), Width = 230, Height = 55,
+            Text = "Imprimir Teste", Dock = DockStyle.Fill, Margin = new Padding(6, 8, 0, 8),
             BackColor = Color.FromArgb(0, 150, 0), ForeColor = Color.White,
             FlatStyle = FlatStyle.Flat, Font = new Font("Segoe UI", 12F, FontStyle.Bold)
         };
         btnTeste.Click += (s, e) => ImprimirTeste();
 
-        _lblStatus.Location = new Point(20, 175);
-        _lblStatus.Size = new Size(480, 60);
-        _lblStatus.ForeColor = Color.FromArgb(60, 60, 60);
+        barra.Controls.Add(btnSalvar, 0, 0);
+        barra.Controls.Add(btnTeste, 1, 0);
+        raiz.Controls.Add(barra, 0, 2);
+        raiz.SetColumnSpan(barra, 2);
 
-        Controls.AddRange(new Control[] { lbl, _cmb, btnAtualizar, btnSalvar, btnTeste, _lblStatus });
+        _lblStatus.Dock = DockStyle.Fill;
+        _lblStatus.ForeColor = Color.FromArgb(60, 60, 60);
+        raiz.Controls.Add(_lblStatus, 0, 3);
+        raiz.SetColumnSpan(_lblStatus, 2);
+
+        Controls.Add(raiz);
     }
 
     private void CarregarLista()
@@ -79,9 +97,8 @@ public sealed class FormPrinterConfig : Form
         foreach (var p in PrinterDiscovery.ListarImpressoras())
             _cmb.Items.Add(p);
         foreach (var com in PrinterDiscovery.ListarPortasCom())
-            _cmb.Items.Add(com); // portas COM ao final
+            _cmb.Items.Add(com);
 
-        // seleciona a impressora salva; senao, tenta sugerir uma termica
         var atual = _servico.ImpressoraPadrao;
         if (string.IsNullOrWhiteSpace(atual))
             atual = PrinterDiscovery.SugerirTermica() ?? "";

@@ -1,11 +1,18 @@
 namespace PdvFesta.Core;
 
-/// <summary>Forma de pagamento registrada na venda (fluxo de caixa).</summary>
+/// <summary>
+/// Forma de pagamento registrada na venda (fluxo de caixa).
+/// Os valores sao ESTAVEIS (gravados como int no SQLite): nunca reordenar.
+/// Cartao(2) e o generico legado; Debito/Credito foram acrescentados depois
+/// para o dashboard financeiro separar as bandeiras.
+/// </summary>
 public enum FormaPagamento
 {
     Dinheiro = 0,
     Pix = 1,
-    Cartao = 2
+    Cartao = 2,          // legado / cartao generico
+    CartaoDebito = 3,
+    CartaoCredito = 4
 }
 
 /// <summary>
@@ -39,6 +46,17 @@ public sealed class ComboItem
     public int Quantidade { get; set; } = 1;
 }
 
+/// <summary>
+/// Categoria do cardapio (aba na tela do caixa). Identidade pelo Nome; a Ordem
+/// controla a posicao da aba e Ativo permite ocultar (soft delete) a categoria.
+/// </summary>
+public sealed class Categoria
+{
+    public string Nome { get; set; } = "";
+    public int Ordem { get; set; }
+    public bool Ativo { get; set; } = true;
+}
+
 /// <summary>Linha do carrinho: um produto + quantidade. Snapshot do preco no momento da venda.</summary>
 public sealed class ItemVenda
 {
@@ -62,4 +80,52 @@ public sealed class Venda
     public int RecebidoCentavos { get; set; }
     public int TrocoCentavos { get; set; }
     public string Operador { get; set; } = "";
+    /// <summary>Turno de caixa ao qual a venda pertence (null = venda legada sem turno).</summary>
+    public long? CaixaId { get; set; }
+}
+
+/// <summary>Situacao de um turno/sessao de caixa.</summary>
+public enum StatusCaixa
+{
+    Aberto = 0,
+    Fechado = 1
+}
+
+/// <summary>
+/// Turno (sessao) de caixa: tem abertura com fundo (troco inicial), opera durante
+/// o dia e e fechado no fim, gerando a Leitura Z. Vendas ficam ligadas ao turno,
+/// permitindo contabilidade separada por dia (sabado x domingo no mesmo banco).
+/// </summary>
+public sealed class Turno
+{
+    public long Id { get; set; }
+    public DateTime Abertura { get; set; } = DateTime.Now;
+    public DateTime? Fechamento { get; set; }
+    /// <summary>Fundo de caixa (troco inicial) em CENTAVOS.</summary>
+    public int FundoCentavos { get; set; }
+    public string Operador { get; set; } = "";
+    public StatusCaixa Status { get; set; } = StatusCaixa.Aberto;
+
+    public bool EstaAberto => Status == StatusCaixa.Aberto;
+}
+
+/// <summary>Tipo de movimento de dinheiro na gaveta (fora vendas).</summary>
+public enum TipoMovimento
+{
+    /// <summary>Retirada de dinheiro do caixa (seguranca).</summary>
+    Sangria = 0,
+    /// <summary>Entrada de dinheiro/troco no caixa.</summary>
+    Suprimento = 1
+}
+
+/// <summary>Movimento manual de caixa (sangria ou suprimento) dentro de um turno.</summary>
+public sealed class MovimentoCaixa
+{
+    public long Id { get; set; }
+    public long CaixaId { get; set; }
+    public TipoMovimento Tipo { get; set; }
+    /// <summary>Valor em CENTAVOS (sempre positivo; o sinal vem do Tipo).</summary>
+    public int ValorCentavos { get; set; }
+    public string Motivo { get; set; } = "";
+    public DateTime DataHora { get; set; } = DateTime.Now;
 }
