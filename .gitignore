@@ -1,0 +1,25 @@
+# Build
+bin/
+obj/
+publish/
+release/
+*.user
+
+# SQLite (banco de dados de runtime - NUNCA versionar dados reais)
+*.db
+*.db-wal
+*.db-shm
+*.db-journal
+
+# Dumps/backups de dados
+dumps/
+*.pdvbackup.json
+
+# IDE
+.vs/
+.idea/
+*.suo
+
+# OS
+Thumbs.db
+Desktop.ini

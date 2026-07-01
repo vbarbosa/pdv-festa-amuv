@@ -1,0 +1,10 @@
+<Solution>
+  <Folder Name="/src/">
+    <Project Path="src/PdvFesta.App/PdvFesta.App.csproj" />
+    <Project Path="src/PdvFesta.Core/PdvFesta.Core.csproj" />
+  </Folder>
+  <Folder Name="/tests/">
+    <Project Path="tests/PdvFesta.E2E/PdvFesta.E2E.csproj" />
+    <Project Path="tests/PdvFesta.Tests/PdvFesta.Tests.csproj" />
+  </Folder>
+</Solution>

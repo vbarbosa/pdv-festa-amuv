@@ -1,0 +1,87 @@
+name: Build e Release
+
+# Roda a cada push na main: testa, compila o .exe, gera o instalador e publica a Release.
+on:
+  push:
+    branches: [ main ]
+  workflow_dispatch: {}   # permite rodar manualmente pelo botao "Run workflow"
+
+permissions:
+  contents: write          # necessario para criar/atualizar Releases
+
+jobs:
+  build:
+    runs-on: windows-latest
+
+    steps:
+      - name: Checkout do repositorio
+        uses: actions/checkout@v4
+
+      - name: Configurar .NET 8
+        uses: actions/setup-dotnet@v4
+        with:
+          dotnet-version: '8.0.x'
+
+      - name: Restaurar dependencias
+        run: dotnet restore
+
+      # --- Testes UNITARIOS (rapidos, headless). E2E FlaUI roda so local. ---
+      - name: Rodar testes unitarios
+        run: dotnet test tests/PdvFesta.Tests/PdvFesta.Tests.csproj -c Release --nologo
+
+      # --- Publica o app: .exe unico, self-contained, win-x64 ---
+      - name: Publicar aplicacao (single-file)
+        run: >
+          dotnet publish src/PdvFesta.App/PdvFesta.App.csproj
+          -c Release -r win-x64 --self-contained true
+          -p:PublishSingleFile=true
+          -p:IncludeNativeLibrariesForSelfExtract=true
+          -o release/PDV-Festa --nologo
+
+      - name: Copiar recursos (cardapio, logo, driver)
+        shell: pwsh
+        run: |
+          Copy-Item src/PdvFesta.App/cardapio.json release/PDV-Festa/ -Force
+          if (Test-Path assets/logo-amuv.png) { Copy-Item assets/logo-amuv.png release/PDV-Festa/ -Force }
+          if (Test-Path assets/driver-impressora) {
+            Copy-Item assets/driver-impressora release/PDV-Festa/driver-impressora -Recurse -Force
+          }
+          if (Test-Path docs/MANUAL-OPERADOR.md) {
+            Copy-Item docs/MANUAL-OPERADOR.md release/PDV-Festa/MANUAL-OPERADOR.txt -Force
+          }
+
+      # --- Instala o Inno Setup no runner e compila o Setup.exe ---
+      - name: Instalar Inno Setup
+        run: choco install innosetup --no-progress -y
+
+      - name: Compilar instalador (Inno Setup)
+        shell: pwsh
+        run: |
+          $iscc = "C:\Program Files (x86)\Inno Setup 6\ISCC.exe"
+          & "$iscc" "/DMyAppVersion=1.0.${{ github.run_number }}" installer/PDVFesta.iss
+          if (-not (Test-Path "release/Setup_PDVFestaJunina.exe")) {
+            throw "Setup.exe nao foi gerado"
+          }
+
+      # --- Empacota o portable .zip ---
+      - name: Gerar ZIP portable
+        shell: pwsh
+        run: |
+          Compress-Archive -Path release/PDV-Festa/* -DestinationPath "release/FestaJuninaPDV_Release.zip" -Force
+
+      # --- Publica na aba Releases (tag movel 'latest') ---
+      - name: Publicar Release
+        uses: softprops/action-gh-release@v2
+        with:
+          tag_name: latest
+          name: PDV Festa - versao mais recente
+          body: |
+            Build automatico da branch main (run #${{ github.run_number }}).
+
+            **Como usar:**
+            - `Setup_PDVFestaJunina.exe` -> instalador completo (recomendado).
+            - `FestaJuninaPDV_Release.zip` -> versao portable (extrair e rodar o .exe).
+          files: |
+            release/Setup_PDVFestaJunina.exe
+            release/FestaJuninaPDV_Release.zip
+          fail_on_unmatched_files: true

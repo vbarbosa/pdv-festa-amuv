@@ -1,0 +1,43 @@
+<Project Sdk="Microsoft.NET.Sdk">
+
+  <PropertyGroup>
+    <OutputType>WinExe</OutputType>
+    <TargetFramework>net8.0-windows</TargetFramework>
+    <UseWindowsForms>true</UseWindowsForms>
+    <ImplicitUsings>enable</ImplicitUsings>
+    <Nullable>enable</Nullable>
+    <AssemblyName>PDV-Festa-AMUV</AssemblyName>
+    <ApplicationIcon>app.ico</ApplicationIcon>
+
+    <!-- ================================================================= -->
+    <!--  BLINDAGEM: executavel unico, autossuficiente, zero instalacao    -->
+    <!-- ================================================================= -->
+    <RuntimeIdentifier>win-x64</RuntimeIdentifier>
+    <SelfContained>true</SelfContained>
+    <PublishSingleFile>true</PublishSingleFile>
+    <!-- Empacota tambem o binario nativo do SQLite (e_sqlite3) dentro do .exe -->
+    <IncludeNativeLibrariesForSelfExtract>true</IncludeNativeLibrariesForSelfExtract>
+    <!-- ReadyToRun: inicia mais rapido em PCs fracos (compila AOT parcial) -->
+    <PublishReadyToRun>true</PublishReadyToRun>
+    <EnableCompressionInSingleFile>true</EnableCompressionInSingleFile>
+    <DebugType>none</DebugType>
+  </PropertyGroup>
+
+  <ItemGroup>
+    <ProjectReference Include="..\PdvFesta.Core\PdvFesta.Core.csproj" />
+  </ItemGroup>
+
+  <!-- Cardapio padrao + marca (logo/icone) copiados para a pasta do exe -->
+  <ItemGroup>
+    <None Update="cardapio.json">
+      <CopyToOutputDirectory>PreserveNewest</CopyToOutputDirectory>
+    </None>
+    <None Update="logo-amuv.png">
+      <CopyToOutputDirectory>PreserveNewest</CopyToOutputDirectory>
+    </None>
+    <None Update="app.ico">
+      <CopyToOutputDirectory>PreserveNewest</CopyToOutputDirectory>
+    </None>
+  </ItemGroup>
+
+</Project>

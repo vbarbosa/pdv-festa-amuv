@@ -1,0 +1,13 @@
+# Normaliza quebras de linha: texto = LF no repo, binarios intactos.
+* text=auto eol=lf
+
+*.png binary
+*.ico binary
+*.pdf binary
+*.exe binary
+*.zip binary
+
+# Scripts que rodam no Windows preservam CRLF
+*.ps1 text eol=crlf
+*.bat text eol=crlf
+*.iss text eol=crlf

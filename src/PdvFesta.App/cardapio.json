@@ -1,0 +1,50 @@
+{
+  "tituloCupom": "ARRAIA DA AMUV",
+  "produtos": [
+    { "id": "quentao",   "nome": "Quentao",          "precoCentavos": 700,  "categoria": "Bebidas", "atalho": 1 },
+    { "id": "refri",     "nome": "Refrigerante",     "precoCentavos": 600,  "categoria": "Bebidas", "atalho": 2 },
+    { "id": "bingo1",    "nome": "Cartela Bingo",    "precoCentavos": 600,  "categoria": "Bingo",   "atalho": 3 },
+    { "id": "pipoca",    "nome": "Pipoca",           "precoCentavos": 500,  "categoria": "Comidas", "atalho": 4 },
+    { "id": "milho",     "nome": "Milho",            "precoCentavos": 700,  "categoria": "Comidas", "atalho": 5 },
+    { "id": "cachorro",  "nome": "Cachorro-Quente",  "precoCentavos": 1000, "categoria": "Comidas", "atalho": 6 },
+    { "id": "pinhao",    "nome": "Pinhao",           "precoCentavos": 600,  "categoria": "Comidas", "atalho": 7 },
+    { "id": "chopp",     "nome": "Chopp",            "precoCentavos": 1000, "categoria": "Bebidas", "atalho": 8 },
+    { "id": "suco",      "nome": "Suco Lata",        "precoCentavos": 600,  "categoria": "Bebidas", "atalho": 9 },
+
+    { "id": "agua",      "nome": "Agua",             "precoCentavos": 500,  "categoria": "Bebidas", "atalho": 0 },
+    { "id": "pacoca",    "nome": "Pacoca",           "precoCentavos": 300,  "categoria": "Doces",   "atalho": 0 },
+    { "id": "torta",     "nome": "Torta Salgada",    "precoCentavos": 500,  "categoria": "Doces",   "atalho": 0 },
+    { "id": "bolochoc",  "nome": "Bolo de Chocolate","precoCentavos": 600,  "categoria": "Doces",   "atalho": 0 },
+    { "id": "bolomilho", "nome": "Bolo de Milho",    "precoCentavos": 600,  "categoria": "Doces",   "atalho": 0 },
+    { "id": "bingo2",    "nome": "2 Cartelas Bingo", "precoCentavos": 1000, "categoria": "Bingo",   "atalho": 0 },
+
+    { "id": "jogo_palhaco",    "nome": "Jogo Palhaco",    "precoCentavos": 500, "categoria": "Jogos", "atalho": 0 },
+    { "id": "jogo_argola",     "nome": "Jogo Argola",     "precoCentavos": 500, "categoria": "Jogos", "atalho": 0 },
+    { "id": "jogo_pescaria",   "nome": "Jogo Pescaria",   "precoCentavos": 500, "categoria": "Jogos", "atalho": 0 },
+    { "id": "jogo_estalinhos", "nome": "Estalinhos",      "precoCentavos": 500, "categoria": "Jogos", "atalho": 0 },
+
+    {
+      "id": "combo_refri_bolo", "nome": "COMBO Refri + Bolo", "precoCentavos": 1000,
+      "categoria": "Promocoes", "atalho": 0,
+      "composicao": [
+        { "produtoId": "refri", "quantidade": 1 },
+        { "produtoId": "bolochoc", "quantidade": 1 }
+      ]
+    },
+    {
+      "id": "combo_refri_pinhao", "nome": "COMBO Refri + Pinhao", "precoCentavos": 1000,
+      "categoria": "Promocoes", "atalho": 0,
+      "composicao": [
+        { "produtoId": "refri", "quantidade": 1 },
+        { "produtoId": "pinhao", "quantidade": 1 }
+      ]
+    },
+    {
+      "id": "combo_2refri", "nome": "COMBO 2 Refri", "precoCentavos": 1000,
+      "categoria": "Promocoes", "atalho": 0,
+      "composicao": [
+        { "produtoId": "refri", "quantidade": 2 }
+      ]
+    }
+  ]
+}
