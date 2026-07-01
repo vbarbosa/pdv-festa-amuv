@@ -78,7 +78,6 @@ CREATE TABLE IF NOT EXISTS caixa_mov (
     data_hora   TEXT NOT NULL
 );
 CREATE INDEX IF NOT EXISTS ix_mov_caixa ON caixa_mov(caixa_id);
-CREATE INDEX IF NOT EXISTS ix_vendas_caixa ON vendas(caixa_id);
 
 CREATE TABLE IF NOT EXISTS venda_itens (
     id            INTEGER PRIMARY KEY AUTOINCREMENT,
@@ -108,7 +107,9 @@ CREATE TABLE IF NOT EXISTS categorias (
 
     /// <summary>
     /// Migracao suave: bancos criados antes dos turnos nao tem a coluna vendas.caixa_id.
-    /// Adiciona se faltar (SQLite ALTER TABLE ADD COLUMN), preservando o historico.
+    /// Adiciona se faltar (SQLite ALTER TABLE ADD COLUMN), preservando o historico, e SO
+    /// ENTAO cria o indice dependente da coluna (por isso o indice nao fica no CREATE em lote:
+    /// num banco antigo a coluna ainda nao existiria quando o indice fosse criado).
     /// </summary>
     private static void MigrarColunaCaixaId(SqliteConnection conn)
     {
@@ -127,6 +128,11 @@ CREATE TABLE IF NOT EXISTS categorias (
             alter.CommandText = "ALTER TABLE vendas ADD COLUMN caixa_id INTEGER NULL;";
             alter.ExecuteNonQuery();
         }
+
+        // Agora a coluna existe com certeza: cria o indice.
+        using var idx = conn.CreateCommand();
+        idx.CommandText = "CREATE INDEX IF NOT EXISTS ix_vendas_caixa ON vendas(caixa_id);";
+        idx.ExecuteNonQuery();
     }
 
     // ---------- CONFIG (chave/valor) ----------

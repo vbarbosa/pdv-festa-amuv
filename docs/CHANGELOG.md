@@ -3,6 +3,17 @@
 Formato baseado em [Keep a Changelog](https://keepachangelog.com/pt-BR/).
 Versionamento [SemVer](https://semver.org/lang/pt-BR/).
 
+## [2.0.1] — Impressão Bluetooth
+
+### Adicionado
+- **Impressão via Bluetooth/serial**: `EscPosPrinter` agora imprime também em portas **COM**
+  (`SerialPort` 9600 8N1), além da fila USB do Windows. O mesmo binário atende as duas conexões.
+- **Rótulo das portas** no F12 (`COM6 (Bluetooth)`, `COM3 (serial)`) para o operador escolher.
+- **Driver POS58** versionado no repo (`drivers/POS58`) + guia **[IMPRESSORA.md](IMPRESSORA.md)**.
+
+### Validado
+- MPT-II real via Bluetooth (COM6): cupom de teste e **duas vendas atômicas** impressas.
+
 ## [2.0.0] — Refatoração PDV profissional
 
 ### Adicionado

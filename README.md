@@ -62,9 +62,11 @@ Um único `.exe` autossuficiente, com impressão de cupom em impressora térmica
 
 ## 🧾 Impressão térmica 58mm
 
-Cupom não-fiscal impresso via **ESC/POS RAW** direto no spooler (sem janela de diálogo,
-sem margens desconfiguradas). Layout fixo de **32 colunas**. Suporta a impressora **MPT-II**
-e similares. Um pacote de instalação do driver acompanha a Release.
+Cupom não-fiscal impresso via **ESC/POS RAW**, funcionando por **USB** (fila do Windows) e
+por **Bluetooth** (porta COM serial) — o app detecta o caminho pelo alvo escolhido no F12,
+que rotula as portas (`COM6 (Bluetooth)`). Layout fixo de **32 colunas**. Suporta a impressora
+**MPT-II / POS58** e similares. Driver POS58 versionado em [`drivers/POS58`](drivers/POS58);
+guia completo em **[docs/IMPRESSORA.md](docs/IMPRESSORA.md)**.
 
 ---
 

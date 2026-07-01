@@ -1,6 +1,8 @@
+using System.IO.Ports;
 using System.Runtime.InteropServices;
 using System.Runtime.Versioning;
 using System.Text;
+using System.Text.RegularExpressions;
 
 namespace PdvFesta.Core;
 
@@ -52,23 +54,71 @@ public static class EscPosPrinter
 
     private static readonly byte[] ESC_INIT = { ESC, 0x40 };            // ESC @  -> reset
     private static readonly byte[] ESC_CODEPAGE_PC860 = { ESC, 0x74, 0x02 }; // ESC t 2
+    // ESC 3 n -> espacamento entre linhas = n dots (padrao ~30-34). 26 aperta o avanco
+    // vertical e economiza bobina, sem sobrepor o texto (altura ~24 dots).
+    private static readonly byte[] ESC_LINE_SPACING = { ESC, 0x33, 26 };
     private static readonly byte[] ESC_ALIGN_LEFT = { ESC, 0x61, 0x00 };
     private static readonly byte[] ESC_ALIGN_CENTER = { ESC, 0x61, 0x01 };
     private static readonly byte[] ESC_NORMAL_FONT = { ESC, 0x21, 0x00 }; // fonte normal
     private static readonly byte[] ESC_DOUBLE_HEIGHT_WIDTH = { ESC, 0x21, 0x30 }; // altura+largura duplas
-    private static readonly byte[] GS_CUT_PAPER = { GS, 0x56, 0x42, 0x00 }; // GS V 66 0 -> corte c/ feed minimo
+    private static readonly byte[] GS_CUT_PAPER = { GS, 0x56, 0x01 };       // GS V 1 -> corte parcial SEM avanco extra (economiza bobina)
     #endregion
 
     /// <summary>
-    /// Envia bytes crus para a impressora nomeada. Retorna (ok, mensagem).
-    /// BLINDADO: qualquer falha de hardware (cabo solto, sem papel, porta ocupada)
-    /// vira (false, msg) — NUNCA lanca excecao, para nao derrubar o caixa.
+    /// Envia bytes crus para o alvo escolhido. Funciona por DOIS caminhos:
+    ///  - **USB / fila do Windows** (nome de impressora instalada) -> spooler (winspool).
+    ///  - **Bluetooth / serial** (ex: "COM6", "COM6 (Bluetooth)") -> porta COM (SerialPort).
+    /// BLINDADO: qualquer falha de hardware (cabo solto, sem papel, porta ocupada, fora de
+    /// alcance) vira (false, msg) — NUNCA lanca excecao, para nao derrubar o caixa.
     /// </summary>
-    public static (bool ok, string msg) EnviarRaw(string impressora, byte[] dados)
+    public static (bool ok, string msg) EnviarRaw(string alvo, byte[] dados)
     {
-        if (string.IsNullOrWhiteSpace(impressora))
+        if (string.IsNullOrWhiteSpace(alvo))
             return (false, "Nenhuma impressora configurada.");
 
+        var porta = ExtrairPortaCom(alvo);
+        return porta is not null ? EnviarSerial(porta, dados) : EnviarSpooler(alvo, dados);
+    }
+
+    /// <summary>Extrai "COMx" do inicio do alvo (ex: "COM6 (Bluetooth)"); null se nao for COM.</summary>
+    private static string? ExtrairPortaCom(string alvo)
+    {
+        var m = Regex.Match(alvo.Trim(), @"^(COM\d+)\b", RegexOptions.IgnoreCase);
+        return m.Success ? m.Groups[1].Value.ToUpperInvariant() : null;
+    }
+
+    /// <summary>Impressao via porta serial/COM (impressoras Bluetooth SPP ou USB-serial).</summary>
+    private static (bool ok, string msg) EnviarSerial(string porta, byte[] dados)
+    {
+        SerialPort? sp = null;
+        try
+        {
+            sp = new SerialPort(porta, 9600, Parity.None, 8, StopBits.One)
+            {
+                Handshake = Handshake.None,
+                WriteTimeout = 5000,
+                DtrEnable = true,
+                RtsEnable = true
+            };
+            sp.Open();
+            sp.Write(dados, 0, dados.Length);
+            sp.BaseStream.Flush();
+            System.Threading.Thread.Sleep(400);  // deixa a bobina puxar antes de fechar
+            return (true, $"Impresso via {porta}.");
+        }
+        catch (Exception ex)
+        {
+            return (false, $"Falha na porta {porta} (impressora ligada/no alcance?): {ex.Message}");
+        }
+        finally
+        {
+            try { if (sp?.IsOpen == true) sp.Close(); sp?.Dispose(); } catch { }
+        }
+    }
+
+    /// <summary>Impressao via fila do Windows (winspool) — impressoras instaladas (USB/driver).</summary>
+    private static (bool ok, string msg) EnviarSpooler(string impressora, byte[] dados)
+    {
         IntPtr h = IntPtr.Zero;
         try
         {
@@ -145,6 +195,7 @@ public static class EscPosPrinter
         var b = new List<byte>();
         b.AddRange(ESC_INIT);
         b.AddRange(ESC_CODEPAGE_PC860);
+        b.AddRange(ESC_LINE_SPACING);   // aperta o avanco vertical (economiza bobina)
 
         foreach (var linha in linhas)
         {
@@ -179,7 +230,8 @@ public static class EscPosPrinter
             }
         }
 
-        b.Add(LF); b.Add(LF);           // avanco minimo antes do corte final
+        // Sem LFs extras: o proprio GS V ja avanca ate a lamina. Cortar logo apos a ultima
+        // linha economiza bobina (evita os "2 dedos" de papel em branco no fim do cupom).
         b.AddRange(GS_CUT_PAPER);
         return b.ToArray();
     }

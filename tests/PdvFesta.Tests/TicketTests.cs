@@ -83,6 +83,44 @@ public class TicketTests
     }
 
     [Fact]
+    public void Completo_SempreMostraQuantidade_ComPrefixoNx_Alinhado()
+    {
+        var venda = new Venda
+        {
+            TotalCentavos = 1700, Forma = FormaPagamento.Pix,
+            Itens =
+            {
+                new ItemVenda { Nome = "Pipoca", PrecoUnitarioCentavos = 500, Quantidade = 2 },
+                new ItemVenda { Nome = "Quentao", PrecoUnitarioCentavos = 700, Quantidade = 1 },
+            }
+        };
+        var linhas = CupomFormatter.MontarTicket(venda, new ConfigCupom { Modo = ModoCupom.Completo });
+        // qtd SEMPRE presente como prefixo, inclusive para 1 unidade
+        Assert.Contains(linhas, l => l.Texto.StartsWith("2x Pipoca"));
+        Assert.Contains(linhas, l => l.Texto.StartsWith("1x Quentao"));
+        // e a linha do item (esquerda) + preco (direita) fica alinhada em 32 col
+        var linhaPipoca = linhas.First(l => l.Texto.StartsWith("2x Pipoca"));
+        Assert.Equal(32, linhaPipoca.Texto.Length);
+        Assert.EndsWith("R$ 10,00", linhaPipoca.Texto);
+    }
+
+    [Fact]
+    public void Completo_LinhasImportantesNuncaQuebram_MesmoComNomeLongo()
+    {
+        // nome gigante deve ser TRUNCADO, nunca gerar linha > 32 (que a termica quebraria)
+        var venda = new Venda
+        {
+            TotalCentavos = 10000, Forma = FormaPagamento.Dinheiro, RecebidoCentavos = 10000, TrocoCentavos = 0,
+            Itens = { new ItemVenda { Nome = "Cachorro-Quente Especial da Casa com Bacon, Batata e Cheddar",
+                                      PrecoUnitarioCentavos = 10000, Quantidade = 1 } }
+        };
+        var linhas = CupomFormatter.MontarTicket(venda, new ConfigCupom { Modo = ModoCupom.Completo });
+        // toda linha nao-titulo (itens, TOTAL, Pagamento, Troco, divisorias) cabe em 32 col
+        Assert.All(linhas.Where(l => l.Estilo != EstiloLinha.Titulo),
+            l => Assert.True(l.Texto.Length <= 32, $"linha vazaria: '{l.Texto}' = {l.Texto.Length} col"));
+    }
+
+    [Fact]
     public void ConfigCupom_Persiste_NoBanco()
     {
         var db = Path.Combine(Path.GetTempPath(), $"cupom_{Guid.NewGuid():N}.db");

@@ -163,11 +163,9 @@ public static class CupomFormatter
         l.Add(new LinhaCupom(Divisoria(largura)));
 
         foreach (var item in venda.Itens)
-        {
-            l.Add(new LinhaCupom(LinhaItem(item.Nome, Moeda(item.SubtotalCentavos), largura)));
-            if (item.Quantidade > 1)
-                l.Add(new LinhaCupom($"  {item.Quantidade} x {Moeda(item.PrecoUnitarioCentavos)}"));
-        }
+            // SEMPRE com a quantidade como prefixo (ex: "2x Pipoca .......... R$ 10,00").
+            // Uma linha por item: fica alinhado (32 col) e economiza bobina.
+            l.Add(new LinhaCupom(LinhaItem($"{item.Quantidade}x {item.Nome}", Moeda(item.SubtotalCentavos), largura)));
 
         l.Add(new LinhaCupom(Divisoria(largura)));
         l.Add(new LinhaCupom(LinhaItem("TOTAL", Moeda(venda.TotalCentavos), largura)));

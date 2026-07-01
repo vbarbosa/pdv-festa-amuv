@@ -136,4 +136,38 @@ public class TurnoCaixaTests : IDisposable
             Assert.Null(vendas[0].CaixaId); // venda legada sem turno
         }
     }
+
+    [Fact]
+    public void Migracao_SchemaMVPReal_SemCaixaId_NaoQuebra()
+    {
+        // Reproduz o schema REAL do MVP: tabela 'vendas' SEM a coluna caixa_id, sem as
+        // tabelas de turno/categoria. Inicializar deve migrar sem lancar (regressao do
+        // bug 'no such column: caixa_id' - o indice era criado antes do ALTER TABLE).
+        using (var conn = new Microsoft.Data.Sqlite.SqliteConnection($"Data Source={_db}"))
+        {
+            conn.Open();
+            using var cmd = conn.CreateCommand();
+            cmd.CommandText = @"
+CREATE TABLE vendas (
+    id INTEGER PRIMARY KEY AUTOINCREMENT, data_hora TEXT NOT NULL, total_cent INTEGER NOT NULL,
+    forma INTEGER NOT NULL, recebido_cent INTEGER NOT NULL DEFAULT 0,
+    troco_cent INTEGER NOT NULL DEFAULT 0, operador TEXT NOT NULL DEFAULT '');
+INSERT INTO vendas (data_hora, total_cent, forma) VALUES ('2026-07-01T10:00:00.0000000', 700, 0);";
+            cmd.ExecuteNonQuery();
+        }
+        Microsoft.Data.Sqlite.SqliteConnection.ClearAllPools();
+
+        using var repo = new Repositorio(_db);
+        var ex = Record.Exception(() => repo.Inicializar());
+        Assert.Null(ex);   // NAO pode lancar 'no such column: caixa_id'
+
+        var vendas = repo.ListarVendas();
+        Assert.Single(vendas);
+        Assert.Null(vendas[0].CaixaId);   // venda legada preservada
+
+        // e grava venda nova ja com turno
+        var t = repo.AbrirCaixa(0, "");
+        repo.SalvarVenda(new Venda { TotalCentavos = 500, Forma = FormaPagamento.Pix, CaixaId = t.Id });
+        Assert.Equal(2, repo.ListarVendas().Count);
+    }
 }
