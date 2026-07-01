@@ -131,7 +131,8 @@ public sealed class FormPagamento : Form
         {
             Text = texto, Width = 84, Height = 40, Margin = new Padding(4),
             FlatStyle = FlatStyle.Flat, Font = new Font("Segoe UI", 11F, FontStyle.Bold),
-            BackColor = Color.FromArgb(235, 235, 235), TabStop = false
+            BackColor = Color.FromArgb(235, 235, 235), TabStop = false,
+            Name = "btnRapido_" + centavos     // AutomationId (usado pela demo do video)
         };
         b.Click += (s, e) =>
         {

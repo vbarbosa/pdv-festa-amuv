@@ -15,7 +15,7 @@
 #>
 [CmdletBinding()]
 param(
-    [int]$DuracaoSegundos = 55,
+    [int]$DuracaoSegundos = 32,
     [string]$Saida = "Treinamento_PDV_FestaJunina.mp4"
 )
 
@@ -79,11 +79,11 @@ function New-FiltroScript($fonte, $dur) {
         "setsar=1,fps=15",
         "fade=t=in:st=0:d=1",
         "fade=t=out:st=${fadeOut}:d=2",
-        (Letra "CAIXA LIVRE\!" 3 8 70 60),
-        (Letra "ATALHOS 1 A 9 OU CLIQUE\!" 8 15 70 46),
-        (Letra "TROCO AUTOMATICO\!" 16 23 70 54),
-        (Letra "VENDA CONCLUIDA\!" 23 26 620 54),
-        (Letra "FECHAMENTO BLINDADO\!" 26 40 70 50)
+        (Letra "CAIXA LIVRE\!" 4 9 70 60),
+        (Letra "ATALHOS 1 A 9 OU CLIQUE\!" 9 14 70 46),
+        (Letra "TROCO AUTOMATICO\!" 14 19 70 54),
+        (Letra "VENDA CONCLUIDA\!" 19 21 620 54),
+        (Letra "FECHAMENTO BLINDADO\!" 22 32 70 50)
     ) -join ","
     $body = "$body[body]"
 
@@ -104,24 +104,35 @@ try {
     & $dotnet build (Join-Path $repo "src\PdvFesta.App\PdvFesta.App.csproj") -c Debug -r win-x64 --nologo -v q | Out-Null
     & $dotnet build (Join-Path $repo "tests\PdvFesta.E2E\PdvFesta.E2E.csproj") -c Debug --nologo -v q | Out-Null
 
+    $exe = Join-Path $repo "src\PdvFesta.App\bin\Debug\net8.0-windows\win-x64\PDV-Festa-AMUV.exe"
+    $db  = Join-Path $env:TEMP ("pdvdemo_" + [guid]::NewGuid().ToString('N') + ".db")
     Get-Process -Name "PDV-Festa-AMUV","ffmpeg" -ErrorAction SilentlyContinue | Stop-Process -Force -ErrorAction SilentlyContinue
     if (Test-Path $rawFile) { Remove-Item $rawFile -Force }
 
-    Info "Iniciando gravacao de tela ($DuracaoSegundos s)..."
+    # ABRE O APP ANTES de gravar (banco novo). O app fica em cena a gravacao inteira,
+    # entao a gravacao NUNCA mostra o desktop/VS Code.
+    Info "Abrindo o app..."
+    $env:PDVFESTA_DB = $db
+    $appProc = Start-Process $exe -PassThru
+    Start-Sleep -Seconds 7   # espera a janela do caixa aparecer
+
+    Info "Iniciando gravacao ($DuracaoSegundos s)..."
     $recArgs = @("-y","-f","gdigrab","-framerate","15","-t","$DuracaoSegundos","-i","desktop",
                  "-c:v","libx264","-preset","ultrafast","-pix_fmt","yuv420p",$rawFile)
     $rec = Start-Process $ffmpeg -ArgumentList $recArgs -PassThru -WindowStyle Hidden
-    Start-Sleep -Seconds 2
+    Start-Sleep -Milliseconds 800
 
-    Info "Rodando a demonstracao (FlaUI opera o caixa devagar)..."
+    Info "Rodando a demonstracao (anexa ao app; sem mouse/teclado fisico)..."
     $env:PDV_DEMO = "1"
     & $dotnet test (Join-Path $repo "tests\PdvFesta.E2E\PdvFesta.E2E.csproj") -c Debug --no-build --nologo -v q `
         --filter "FullyQualifiedName~DemoMode" | Out-Null
     $env:PDV_DEMO = $null
 
-    Info "Aguardando a gravacao encerrar..."
-    if (-not $rec.HasExited) { $rec.WaitForExit(($DuracaoSegundos + 15) * 1000) | Out-Null }
-    Get-Process -Name "PDV-Festa-AMUV" -ErrorAction SilentlyContinue | Stop-Process -Force -ErrorAction SilentlyContinue
+    Info "Encerrando gravacao e fechando o app..."
+    if (-not $rec.HasExited) { $rec.WaitForExit(($DuracaoSegundos + 10) * 1000) | Out-Null }
+    if ($rec -and -not $rec.HasExited) { try { $rec.Kill() } catch {} }
+    if ($appProc -and -not $appProc.HasExited) { try { $appProc.Kill() } catch {} }
+    Get-Process -Name "PDV-Festa-AMUV","ffmpeg" -ErrorAction SilentlyContinue | Stop-Process -Force -ErrorAction SilentlyContinue
     if (-not (Test-Path $rawFile)) { throw "A gravacao nao gerou arquivo ($rawFile)." }
 
     Info "Editando (letreiros WordArt + cartoes + transicoes)..."
@@ -144,5 +155,7 @@ try {
 }
 catch {
     Erro $_.Exception.Message
+    # limpeza garantida: nada de app/ffmpeg travando a tela
+    Get-Process -Name "PDV-Festa-AMUV","ffmpeg" -ErrorAction SilentlyContinue | Stop-Process -Force -ErrorAction SilentlyContinue
     exit 1
 }
