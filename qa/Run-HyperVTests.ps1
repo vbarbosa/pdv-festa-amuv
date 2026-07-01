@@ -124,6 +124,26 @@ try {
         $exe = "$env:LOCALAPPDATA\Programs\FestaJuninaPDV\PDV-Festa-AMUV.exe"
         if (-not (Test-Path $exe)) { L "!!! exe nao instalado"; return @{ ok = $false; etapa = "instalacao" } }
 
+        # SMOKE do app instalado: abre sozinho por 8s e confere se fica de pe (diagnostica
+        # crash de inicializacao dentro da VM). Captura o log do app se ele cair.
+        $dbSmoke = "$env:TEMP\smoke_$([guid]::NewGuid().ToString('N')).db"
+        $env:PDVFESTA_DB = $dbSmoke
+        L "SMOKE: abrindo o app instalado..."
+        $ap = Start-Process $exe -PassThru
+        Start-Sleep 8
+        if ($ap.HasExited) {
+            L "SMOKE FALHOU: app fechou sozinho (exit=$($ap.ExitCode)). Vendo o log do app..."
+            $logsApp = Join-Path (Split-Path $dbSmoke) "logs"
+            $hoje = Join-Path $logsApp ("pdv-{0}.log" -f (Get-Date -Format 'yyyyMMdd'))
+            if (Test-Path $hoje) { Copy-Item $hoje "C:\TempPDV\evidencias\app-crash.log" -Force; L "log do app copiado (app-crash.log)"; L ("APP LOG >>> " + ((Get-Content $hoje -Raw) -replace "`r?`n"," | ")) }
+            else { L "sem log do app em $hoje" }
+        } else {
+            L "SMOKE OK: app aberto (titulo='$((Get-Process -Id $ap.Id).MainWindowTitle)')"
+            try { $ap.Kill() } catch {}
+        }
+        $env:PDVFESTA_DB = $null
+        Remove-Item $dbSmoke,"$dbSmoke-wal","$dbSmoke-shm" -Force -ErrorAction SilentlyContinue
+
         # roda a bateria FlaUI (se veio) apontando PDV_E2E_EVID para salvar screenshots.
         $dll = "C:\TempPDV\tests\PdvFesta.E2E.dll"
         if (Test-Path $dll) {
