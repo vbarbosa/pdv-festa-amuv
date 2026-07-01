@@ -101,7 +101,13 @@ public sealed class FormPrinterConfig : Form
             BackColor = Color.FromArgb(0, 150, 0), ForeColor = Color.White,
             FlatStyle = FlatStyle.Flat, Font = new Font("Segoe UI", 12F, FontStyle.Bold)
         };
-        btnTeste.Click += (s, e) => ImprimirTeste();
+        // trava anti-duplo-clique: nao imprime 2x se o operador clicar rapido.
+        btnTeste.Click += async (s, e) =>
+        {
+            btnTeste.Enabled = false;
+            try { ImprimirTeste(); }
+            finally { await System.Threading.Tasks.Task.Delay(2000); btnTeste.Enabled = true; }
+        };
 
         barra.Controls.Add(btnSalvar, 0, 0);
         barra.Controls.Add(btnTeste, 1, 0);

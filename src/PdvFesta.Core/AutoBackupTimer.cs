@@ -32,7 +32,8 @@ public sealed class AutoBackupTimer : IDisposable
         _timer = new Timer(_ => Executar(), null, periodo, periodo);
     }
 
-    private void Executar()
+    /// <summary>Dispara um backup imediato (a mesma rotina do timer). internal p/ testes.</summary>
+    internal void Executar()
     {
         // evita dois backups simultaneos
         if (Interlocked.Exchange(ref _emExecucao, 1) == 1) return;

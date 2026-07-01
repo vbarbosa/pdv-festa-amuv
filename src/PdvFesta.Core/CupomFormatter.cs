@@ -168,6 +168,7 @@ public static class CupomFormatter
         l.Add(new LinhaCupom(DivisoriaDupla(largura)));
         l.Add(new LinhaCupom(Centralizar("FICHAS DE CONSUMO", largura)));
         l.Add(new LinhaCupom(DivisoriaDupla(largura)));
+        l.Add(new LinhaCupom(""));   // margem antes do 1o vale (mesma folga dos demais)
 
         // 3) Desmembramento: para CADA item de venda (ignorando linhas de desconto de
         //    combo, que tem ProdutoId vazio), imprime 'Quantidade' vales de "1x NOME".
@@ -183,13 +184,17 @@ public static class CupomFormatter
                 foreach (var linha in Wrap($"1X {item.Nome.ToUpperInvariant()}", 28))
                     l.Add(new LinhaCupom(linha, EstiloLinha.Expandida));
                 l.Add(new LinhaCupom(Centralizar("Vale 1 item", largura)));
-                // FOLGA (meio-termo) para dobrar/rasgar: 1 linha em branco de cada lado do
-                // pontilhado. Corte no meio do branco, sem tocar no texto, sem gastar bobina.
+                // FOLGA para dobrar/rasgar: 1 linha em branco de cada lado do pontilhado.
                 l.Add(new LinhaCupom(""));
                 l.Add(new LinhaCupom(DivisoriaPontilhada(largura)));   // linha de rasgar
                 l.Add(new LinhaCupom(""));
             }
         }
+
+        // remove as linhas em branco no FIM (o corte ja avanca a bobina) para nao sobrar
+        // quase um vale inteiro de papel branco depois do ultimo ticket.
+        while (l.Count > 0 && l[^1].Estilo == EstiloLinha.Normal && l[^1].Texto == "")
+            l.RemoveAt(l.Count - 1);
 
         return l;
     }

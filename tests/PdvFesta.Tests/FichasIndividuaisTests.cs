@@ -68,6 +68,18 @@ public class FichasIndividuaisTests
     }
 
     [Fact]
+    public void ReciboComVales_TemMargemAntesDoPrimeiroVale()
+    {
+        var linhas = CupomFormatter.MontarTicket(VendaExemplo(), CfgVales());
+        // logo apos a 2a divisoria dupla (fecha o cabecalho "FICHAS DE CONSUMO") deve haver
+        // uma linha em branco, para o 1o vale nao ficar colado no cabecalho.
+        int idxCab = linhas.FindIndex(x => x.Texto.Contains("FICHAS DE CONSUMO"));
+        Assert.True(idxCab >= 0);
+        // idxCab+1 = divisoria dupla de baixo; idxCab+2 = linha em branco (a margem)
+        Assert.Equal("", linhas[idxCab + 2].Texto);
+    }
+
+    [Fact]
     public void ReciboComVales_IgnoraLinhaDeDescontoDeCombo()
     {
         var venda = VendaExemplo();

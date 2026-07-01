@@ -76,7 +76,13 @@ public sealed class FormLayoutCupom : Form
             BackColor = Color.FromArgb(0, 120, 200), ForeColor = Color.White,
             FlatStyle = FlatStyle.Flat, Font = new Font("Segoe UI", 11F, FontStyle.Bold)
         };
-        btnTeste.Click += (s, e) => ImprimirTeste();
+        // trava anti-duplo-clique: desabilita o botao por ~2s para nao imprimir 2x.
+        btnTeste.Click += async (s, e) =>
+        {
+            btnTeste.Enabled = false;
+            try { ImprimirTeste(); }
+            finally { await System.Threading.Tasks.Task.Delay(2000); btnTeste.Enabled = true; }
+        };
 
         var fluxo = new FlowLayoutPanel
         {
