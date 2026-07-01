@@ -3,6 +3,34 @@
 Formato baseado em [Keep a Changelog](https://keepachangelog.com/pt-BR/).
 Versionamento [SemVer](https://semver.org/lang/pt-BR/).
 
+## [2.4.0] — Gestão avançada, permissões e QA em sandbox
+
+### Adicionado
+- **Sistema de permissões por ação**: o admin delega, numa tela (com senha), quais ações o
+  operador faz sem senha. Inclui trocar a senha de administrador. Ver ADR-0020.
+- **Excluir seguro** em Produtos/Categorias/Promoções: exclusão permanente com dupla
+  confirmação e **trava** (item com uso só pode Inativar). Ver ADR-0021.
+- **Versionamento do cardápio**: exportar/importar o catálogo como `.json` datado. ADR-0021.
+- **Painel em tempo real (F4)**: dashboard com Total em Gaveta, faturamento e itens mais
+  vendidos, auto-atualizado, sem senha (só visualização).
+- **Pagamento estilo PDV**: notas/moedas de R$1 a R$200 que **somam**, botões Exato e Limpar,
+  campo de recebido vazio ao abrir.
+- **Layout do Cupom**: preview renderiza os vales destacáveis; botão "Imprimir teste de layout".
+- **Vales viram o modo PADRÃO** do cupom (a reimpressão já sai com os vales).
+- **QA em sandbox Hyper-V**: scripts de VM descartável + E2E com screenshots por etapa. ADR-0022.
+- **Tela Sobre** e **tela da Impressora** reformuladas (status online, tipo USB/Bluetooth,
+  detecção automática).
+
+### Alterado
+- **Atalho legado removido** (coluna/campo de atalho e tela "Customizar Atalhos"): a
+  navegação por teclado é 100% por posição (letra da categoria + número).
+- Testes E2E de UI agora são **condicionais** (rodam só na sandbox; no-op fora).
+
+### Testes
+- **157 testes unitários**: preços/combos (horário cruzando meia-noite, múltiplos conjuntos),
+  troco, formatação de cupom/vales, robustez de banco (round-trip, retomada de caixa, valores
+  extremos, estorno), config do cupom, exclusão com trava, versionamento do cardápio.
+
 ## [2.3.0] — Fichas de vales, navegação por teclado e robustez de impressão
 
 ### Adicionado
