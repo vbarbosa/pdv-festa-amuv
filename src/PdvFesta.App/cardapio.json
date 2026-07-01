@@ -1,5 +1,6 @@
 {
   "tituloCupom": "ARRAIA DA AMUV",
+  "categorias": ["Comidas", "Doces", "Bebidas", "Jogos", "Bingo", "Promocoes"],
   "produtos": [
     { "id": "quentao",   "nome": "Quentao",          "precoCentavos": 700,  "categoria": "Bebidas", "atalho": 1 },
     { "id": "refri",     "nome": "Refrigerante",     "precoCentavos": 600,  "categoria": "Bebidas", "atalho": 2 },

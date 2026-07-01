@@ -3,11 +3,13 @@ using System.Text.Json.Serialization;
 
 namespace PdvFesta.Core;
 
-/// <summary>Cardapio lido do JSON (catalogo + titulo do cupom).</summary>
+/// <summary>Cardapio lido do JSON (catalogo + titulo do cupom + ordem das categorias).</summary>
 public sealed class Cardapio
 {
     public string TituloCupom { get; set; } = "FESTA";
     public List<Produto> Produtos { get; set; } = new();
+    /// <summary>Ordem de exibicao das abas (ex: Comidas, Doces, Bebidas...). Opcional.</summary>
+    public List<string> Categorias { get; set; } = new();
 }
 
 /// <summary>Carrega o cardapio do arquivo JSON e faz o seed inicial do banco.</summary>
@@ -32,8 +34,20 @@ public static class CardapioLoader
     /// </summary>
     public static void SemearSeVazio(Repositorio repo, Cardapio cardapio)
     {
-        if (repo.ListarProdutos().Count > 0) return;
-        repo.SalvarCatalogo(cardapio.Produtos);
-        repo.SalvarConfig("titulo_cupom", cardapio.TituloCupom);
+        if (repo.ListarProdutos().Count == 0)
+        {
+            repo.SalvarCatalogo(cardapio.Produtos);
+            repo.SalvarConfig("titulo_cupom", cardapio.TituloCupom);
+        }
+
+        // Categorias: semeia se a tabela estiver vazia (idempotente), inclusive em bancos
+        // ja existentes (migracao suave para quem instalou antes das categorias).
+        // Ordem = lista explicita do JSON + categorias vindas dos produtos (sem duplicar).
+        var ordem = new List<string>(cardapio.Categorias);
+        foreach (var c in cardapio.Produtos.Select(p => p.Categoria))
+            if (!ordem.Contains(c)) ordem.Add(c);
+        foreach (var c in repo.ListarProdutos().Select(p => p.Categoria))
+            if (!ordem.Contains(c)) ordem.Add(c);
+        repo.SemearCategoriasSeVazio(ordem);
     }
 }

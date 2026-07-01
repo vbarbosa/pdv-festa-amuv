@@ -1,5 +1,6 @@
 using System.Diagnostics;
 using FlaUI.Core.AutomationElements;
+using FlaUI.Core.Definitions;
 using FlaUI.Core.Input;
 using FlaUI.Core.WindowsAPI;
 using FlaUI.UIA3;
@@ -9,12 +10,12 @@ using Xunit;
 namespace PdvFesta.E2E;
 
 /// <summary>
-/// Teste funcional End-to-End com FlaUI: dirige a UI REAL (mouse/teclado)
-/// e valida que a venda chega ao banco SQLite. Roda LOCAL (precisa de sessao
-/// com desktop); no CI headless ficam os testes unitarios.
+/// Teste funcional End-to-End com FlaUI: dirige a UI REAL (mouse/teclado) e valida
+/// que a venda chega ao banco SQLite. Roda LOCAL (precisa de sessao com desktop).
 ///
-/// Fluxo: abre o app -> clica no Quentao -> F2 (pagamento) -> digita recebido
-/// -> Enter (confirma) -> le o SQLite e confere a venda.
+/// Fluxo: abre o app -> abre o caixa -> clica Quentao + Cartela Bingo ->
+/// valida 2 linhas na DataGridView -> F2 (pagamento) -> digita recebido -> Enter ->
+/// le o SQLite e confere a venda (total, forma, troco, turno).
 /// </summary>
 [Collection("e2e")]
 public sealed class VendaE2ETests : IDisposable
@@ -26,9 +27,7 @@ public sealed class VendaE2ETests : IDisposable
     public VendaE2ETests()
     {
         _dbPath = Path.Combine(Path.GetTempPath(), $"e2e_{Guid.NewGuid():N}.db");
-
-        // Usa o build de Debug da App (gerado por dotnet build).
-        var baseDir = AppContext.BaseDirectory; // .../tests/PdvFesta.E2E/bin/Debug/net8.0-windows
+        var baseDir = AppContext.BaseDirectory;
         var repoRoot = Path.GetFullPath(Path.Combine(baseDir, "..", "..", "..", "..", ".."));
         _exePath = Path.Combine(repoRoot, "src", "PdvFesta.App", "bin", "Debug",
                                 "net8.0-windows", "win-x64", "PDV-Festa-AMUV.exe");
@@ -41,55 +40,75 @@ public sealed class VendaE2ETests : IDisposable
             if (File.Exists(_dbPath + ext)) { try { File.Delete(_dbPath + ext); } catch { } }
     }
 
-    [Fact]
-    public void FluxoCompleto_ClicaProduto_Paga_GravaNoBanco()
+    private Window SubirApp(UIA3Automation automation)
     {
         Assert.True(File.Exists(_exePath), $"Compile a App primeiro. Nao achei: {_exePath}");
-
-        // 1) sobe o app apontando para um banco temporario isolado
         var psi = new ProcessStartInfo(_exePath) { UseShellExecute = false };
         psi.EnvironmentVariables["PDVFESTA_DB"] = _dbPath;
-        // cardapio ao lado do exe garante o seed
         _proc = Process.Start(psi)!;
 
-        using var automation = new UIA3Automation();
         var app = FlaUI.Core.Application.Attach(_proc);
         var janela = RetentarObterJanela(app, automation);
         Assert.NotNull(janela);
+        return janela!;
+    }
 
-        // 2) clica no botao do Quentao (AutomationId = btnProduto_quentao)
-        var btnQuentao = RetentarAchar(janela!, "btnProduto_quentao");
-        Assert.NotNull(btnQuentao);
-        btnQuentao!.AsButton().Invoke();
-
-        // clica de novo -> 2 quentoes
-        btnQuentao.AsButton().Invoke();
-
-        // 3) F2 abre o pagamento
-        Keyboard.Press(VirtualKeyShort.F2);
+    /// <summary>Ao iniciar sem caixa, a tela de Abertura aparece (modal): confirma com fundo 0.</summary>
+    private void AbrirCaixa(UIA3Automation automation)
+    {
+        // O modal e uma janela SEPARADA (ShowDialog) -> busca a partir do desktop.
+        var btn = RetentarAcharDesktop(automation, "btnAbrirCaixa");
+        Assert.NotNull(btn);
+        btn!.AsButton().Invoke();
         System.Threading.Thread.Sleep(600);
+    }
 
-        var formPag = RetentarAchar(janela!, "txtRecebido", profundidade: true);
-        Assert.NotNull(formPag);
+    [Fact]
+    public void FluxoCompleto_AbreCaixa_DoisProdutos_ValidaGrid_Paga_GravaNoBanco()
+    {
+        using var automation = new UIA3Automation();
+        var janela = SubirApp(automation);
 
-        // dinheiro ja vem selecionado; digita valor recebido e confirma
-        formPag!.AsTextBox().Enter("20,00");
+        AbrirCaixa(automation);
+
+        // Adiciona via ATALHO de teclado (robusto: independe da aba selecionada, ao
+        // contrario do clique, que so acha o botao se a aba dele estiver visivel).
+        // Atalho 1 = Quentao (700), atalho 3 = Cartela Bingo (600).
+        janela.Focus();
+        System.Threading.Thread.Sleep(300);
+        Keyboard.Type("1");
+        System.Threading.Thread.Sleep(300);
+        Keyboard.Type("3");
+        System.Threading.Thread.Sleep(400);
+
+        // valida que a DataGridView do carrinho renderizou 2 LINHAS
+        var grid = RetentarAchar(janela, "gridCarrinho");
+        Assert.NotNull(grid);
+        Assert.Equal(2, grid!.AsGrid().RowCount);
+
+        // F2 abre o pagamento (modal separado)
+        Keyboard.Press(VirtualKeyShort.F2);
+        System.Threading.Thread.Sleep(700);
+
+        var txt = RetentarAcharDesktop(automation, "txtRecebido");
+        Assert.NotNull(txt);
+        txt!.AsTextBox().Enter("20,00");
         System.Threading.Thread.Sleep(300);
         Keyboard.Type(VirtualKeyShort.ENTER);
-        System.Threading.Thread.Sleep(800);
+        System.Threading.Thread.Sleep(900);
 
-        // 4) valida no banco: 1 venda de 2 x Quentao (700) = 1400, dinheiro
-        // fecha o app para liberar o arquivo antes de ler
-        try { if (!_proc.HasExited) _proc.Kill(true); } catch { }
+        // fecha o app para liberar o arquivo antes de ler o banco
+        try { if (!_proc!.HasExited) _proc.Kill(true); } catch { }
         System.Threading.Thread.Sleep(500);
 
         using var repo = new Repositorio(_dbPath);
         repo.Inicializar();
         var vendas = repo.ListarVendas();
         Assert.Single(vendas);
-        Assert.Equal(1400, vendas[0].TotalCentavos);
+        Assert.Equal(1300, vendas[0].TotalCentavos);         // 700 + 600
         Assert.Equal(FormaPagamento.Dinheiro, vendas[0].Forma);
-        Assert.Equal(600, vendas[0].TrocoCentavos); // 2000 - 1400
+        Assert.Equal(700, vendas[0].TrocoCentavos);          // 2000 - 1300
+        Assert.NotNull(vendas[0].CaixaId);                   // vinculada ao turno
     }
 
     // ---- helpers de robustez (a UI pode demorar a aparecer) ----
@@ -104,11 +123,23 @@ public sealed class VendaE2ETests : IDisposable
         return null;
     }
 
-    private static AutomationElement? RetentarAchar(AutomationElement raiz, string automationId, bool profundidade = false)
+    private static AutomationElement? RetentarAchar(AutomationElement raiz, string automationId)
     {
         for (int i = 0; i < 20; i++)
         {
             var el = raiz.FindFirstDescendant(cf => cf.ByAutomationId(automationId));
+            if (el is not null) return el;
+            System.Threading.Thread.Sleep(400);
+        }
+        return null;
+    }
+
+    /// <summary>Busca a partir do DESKTOP (para janelas modais separadas do app).</summary>
+    private static AutomationElement? RetentarAcharDesktop(UIA3Automation aut, string automationId)
+    {
+        for (int i = 0; i < 20; i++)
+        {
+            var el = aut.GetDesktop().FindFirstDescendant(cf => cf.ByAutomationId(automationId));
             if (el is not null) return el;
             System.Threading.Thread.Sleep(400);
         }

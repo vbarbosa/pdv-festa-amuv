@@ -1,4 +1,5 @@
 using System.Runtime.Versioning;
+using PdvFesta.Core;
 
 namespace PdvFesta.App;
 
@@ -8,6 +9,11 @@ internal static class Program
     [STAThread]
     private static void Main()
     {
+        // ---- BLINDAGEM GLOBAL: nenhum erro inesperado derruba o caixa em silencio ----
+        Application.SetUnhandledExceptionMode(UnhandledExceptionMode.CatchException);
+        Application.ThreadException += (s, e) => Registrar(e.Exception, "ThreadException");
+        AppDomain.CurrentDomain.UnhandledException += (s, e) => Registrar(e.ExceptionObject as Exception, "DomainException");
+
         ApplicationConfiguration.Initialize();
 
         // Banco em %AppData%\FestaJuninaPDV (sobrevive a reinstalacao);
@@ -24,16 +30,35 @@ internal static class Program
         // cardapio.json acompanha o .exe (semente inicial do catalogo)
         var cardapioPath = Path.Combine(baseDir, "cardapio.json");
 
+        // Log na mesma pasta do banco (ex: %AppData%\FestaJuninaPDV\logs).
+        Log.Inicializar(Path.GetDirectoryName(dbPath) ?? baseDir);
+        Log.Info($"===== PDV iniciando ===== (db: {dbPath})");
+
         try
         {
             using var servico = new Servico(dbPath, cardapioPath);
             Application.Run(new FormVendas(servico));
+            Log.Info("===== PDV encerrado normalmente =====");
         }
         catch (Exception ex)
         {
+            Registrar(ex, "Startup");
             MessageBox.Show(
-                "Erro ao iniciar o PDV:\n\n" + ex.Message,
+                "Erro ao iniciar o PDV:\n\n" + ex.Message +
+                "\n\n(Detalhes salvos na pasta logs)",
                 "PDV Festa", MessageBoxButtons.OK, MessageBoxIcon.Error);
         }
+    }
+
+    /// <summary>Registra o erro em arquivo e avisa o operador sem derrubar o app.</summary>
+    private static void Registrar(Exception? ex, string origem)
+    {
+        if (ex is null) return;
+        Log.Erro($"({origem}) erro nao tratado", ex);
+
+        MessageBox.Show(
+            "Ocorreu um erro inesperado, mas o sistema continua funcionando.\n" +
+            "Se persistir, reinicie o programa.\n\nDetalhe: " + ex.Message,
+            "Aviso", MessageBoxButtons.OK, MessageBoxIcon.Warning);
     }
 }

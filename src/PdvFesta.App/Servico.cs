@@ -61,6 +61,22 @@ public sealed class Servico : IDisposable
     /// <summary>Catalogo completo (inclui inativos) para a tela de gestao.</summary>
     public List<Produto> ProdutosTodos() => Repo.ListarProdutos();
 
+    // ----- categorias -----
+    public List<Categoria> Categorias() => Repo.ListarCategorias(incluirInativas: true);
+    public List<Categoria> CategoriasAtivas() => Repo.ListarCategorias(incluirInativas: false);
+    public void SalvarCategoria(Categoria c) => Repo.SalvarCategoria(c);
+    public void InativarCategoria(string nome) => Repo.InativarCategoria(nome);
+
+    /// <summary>Garante que a categoria exista (cria no fim da ordem se for nova).</summary>
+    public void GarantirCategoria(string nome)
+    {
+        if (string.IsNullOrWhiteSpace(nome)) return;
+        var todas = Repo.ListarCategorias(incluirInativas: true);
+        if (todas.Any(c => string.Equals(c.Nome, nome, StringComparison.OrdinalIgnoreCase))) return;
+        int prox = todas.Count == 0 ? 0 : todas.Max(c => c.Ordem) + 1;
+        Repo.SalvarCategoria(new Categoria { Nome = nome, Ordem = prox, Ativo = true });
+    }
+
     public string ImpressoraPadrao => Repo.LerConfig("impressora", "");
     public void DefinirImpressora(string nome) => Repo.SalvarConfig("impressora", nome);
 
@@ -78,16 +94,19 @@ public sealed class Servico : IDisposable
     public Turno AbrirCaixa(int fundoCentavos, string operador)
     {
         TurnoAtual = Repo.AbrirCaixa(fundoCentavos, operador);
+        Log.Info($"Caixa ABERTO #{TurnoAtual.Id} fundo={fundoCentavos}c operador='{operador}'");
         return TurnoAtual;
     }
 
     public void FecharCaixa()
     {
         if (TurnoAtual is null) return;
-        Repo.FecharCaixa(TurnoAtual.Id);
+        var id = TurnoAtual.Id;
+        Repo.FecharCaixa(id);
         TurnoAtual.Status = StatusCaixa.Fechado;
         TurnoAtual.Fechamento = DateTime.Now;
         TurnoAtual = null;
+        Log.Info($"Caixa FECHADO #{id}");
     }
 
     public void RegistrarMovimento(TipoMovimento tipo, int valorCentavos, string motivo)
@@ -97,6 +116,7 @@ public sealed class Servico : IDisposable
         {
             CaixaId = TurnoAtual.Id, Tipo = tipo, ValorCentavos = valorCentavos, Motivo = motivo
         });
+        Log.Info($"Movimento {tipo} {valorCentavos}c caixa #{TurnoAtual.Id} motivo='{motivo}'");
     }
 
     /// <summary>Espelho financeiro do turno atual (dashboard em tempo real).</summary>
@@ -127,9 +147,11 @@ public sealed class Servico : IDisposable
         venda.CaixaId = TurnoAtual?.Id;       // vincula ao turno atual
         Repo.SalvarVenda(venda);              // 1) grava PRIMEIRO (dado seguro)
         Carrinho.Limpar();
+        Log.Info($"Venda #{venda.Id} {forma} total={venda.TotalCentavos}c troco={venda.TrocoCentavos}c caixa={venda.CaixaId}");
 
         // 2) imprime (se falhar, a venda ja esta salva; operador pode reimprimir)
         var (ok, msg) = ImprimirVenda(venda);
+        if (!ok) Log.Aviso($"Impressao falhou venda #{venda.Id}: {msg}");
         return (venda, ok, msg);
     }
 

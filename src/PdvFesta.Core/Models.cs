@@ -46,6 +46,17 @@ public sealed class ComboItem
     public int Quantidade { get; set; } = 1;
 }
 
+/// <summary>
+/// Categoria do cardapio (aba na tela do caixa). Identidade pelo Nome; a Ordem
+/// controla a posicao da aba e Ativo permite ocultar (soft delete) a categoria.
+/// </summary>
+public sealed class Categoria
+{
+    public string Nome { get; set; } = "";
+    public int Ordem { get; set; }
+    public bool Ativo { get; set; } = true;
+}
+
 /// <summary>Linha do carrinho: um produto + quantidade. Snapshot do preco no momento da venda.</summary>
 public sealed class ItemVenda
 {

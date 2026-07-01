@@ -94,6 +94,12 @@ CREATE INDEX IF NOT EXISTS ix_itens_venda ON venda_itens(venda_id);
 CREATE TABLE IF NOT EXISTS config (
     chave  TEXT PRIMARY KEY,
     valor  TEXT NOT NULL
+);
+
+CREATE TABLE IF NOT EXISTS categorias (
+    nome   TEXT PRIMARY KEY,
+    ordem  INTEGER NOT NULL DEFAULT 0,
+    ativo  INTEGER NOT NULL DEFAULT 1
 );";
         cmd.ExecuteNonQuery();
 
@@ -411,6 +417,70 @@ ON CONFLICT(id) DO UPDATE SET
         cmd.CommandText = "SELECT EXISTS(SELECT 1 FROM produtos WHERE id = $id);";
         cmd.Parameters.AddWithValue("$id", id);
         return Convert.ToInt64(cmd.ExecuteScalar() ?? 0L) == 1;
+    }
+
+    // ---------- CATEGORIAS ----------
+
+    /// <summary>Lista categorias ordenadas por Ordem, depois Nome. Ativas por padrao.</summary>
+    public List<Categoria> ListarCategorias(bool incluirInativas = false)
+    {
+        using var conn = Abrir();
+        using var cmd = conn.CreateCommand();
+        cmd.CommandText = incluirInativas
+            ? "SELECT nome, ordem, ativo FROM categorias ORDER BY ordem, nome;"
+            : "SELECT nome, ordem, ativo FROM categorias WHERE ativo = 1 ORDER BY ordem, nome;";
+        var lista = new List<Categoria>();
+        using var r = cmd.ExecuteReader();
+        while (r.Read())
+            lista.Add(new Categoria { Nome = r.GetString(0), Ordem = r.GetInt32(1), Ativo = r.GetInt32(2) == 1 });
+        return lista;
+    }
+
+    /// <summary>Insere ou atualiza uma categoria (upsert pelo Nome).</summary>
+    public void SalvarCategoria(Categoria c)
+    {
+        using var conn = Abrir();
+        using var cmd = conn.CreateCommand();
+        cmd.CommandText = @"
+INSERT INTO categorias (nome, ordem, ativo) VALUES ($n, $o, $a)
+ON CONFLICT(nome) DO UPDATE SET ordem = excluded.ordem, ativo = excluded.ativo;";
+        cmd.Parameters.AddWithValue("$n", c.Nome);
+        cmd.Parameters.AddWithValue("$o", c.Ordem);
+        cmd.Parameters.AddWithValue("$a", c.Ativo ? 1 : 0);
+        cmd.ExecuteNonQuery();
+    }
+
+    /// <summary>Soft delete de categoria (oculta a aba, nao apaga os produtos).</summary>
+    public void InativarCategoria(string nome)
+    {
+        using var conn = Abrir();
+        using var cmd = conn.CreateCommand();
+        cmd.CommandText = "UPDATE categorias SET ativo = 0 WHERE nome = $n;";
+        cmd.Parameters.AddWithValue("$n", nome);
+        cmd.ExecuteNonQuery();
+    }
+
+    /// <summary>Semeia categorias (na ordem dada) somente se a tabela estiver vazia.</summary>
+    public void SemearCategoriasSeVazio(IEnumerable<string> nomesEmOrdem)
+    {
+        using var conn = Abrir();
+        using (var check = conn.CreateCommand())
+        {
+            check.CommandText = "SELECT COUNT(*) FROM categorias;";
+            if (Convert.ToInt64(check.ExecuteScalar() ?? 0L) > 0) return;
+        }
+        using var tx = conn.BeginTransaction();
+        int ordem = 0;
+        foreach (var nome in nomesEmOrdem)
+        {
+            using var cmd = conn.CreateCommand();
+            cmd.Transaction = tx;
+            cmd.CommandText = "INSERT OR IGNORE INTO categorias (nome, ordem, ativo) VALUES ($n, $o, 1);";
+            cmd.Parameters.AddWithValue("$n", nome);
+            cmd.Parameters.AddWithValue("$o", ordem++);
+            cmd.ExecuteNonQuery();
+        }
+        tx.Commit();
     }
 
     // ---------- TURNOS DE CAIXA ----------
