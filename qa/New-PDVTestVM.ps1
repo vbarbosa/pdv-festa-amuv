@@ -30,6 +30,7 @@ param(
     [string]$SwitchName  = "Default Switch",
     [string]$VhdPath     = "",
     [switch]$Finalizar,
+    [switch]$PularSdk,
     [string]$GuestUser   = "pdv",
     [string]$GuestPass   = "pdv"
 )
@@ -72,18 +73,56 @@ if ($Finalizar) {
     $cred = New-Object System.Management.Automation.PSCredential(
         $GuestUser, (ConvertTo-SecureString $GuestPass -AsPlainText -Force))
 
-    # instala o .NET 8 Desktop Runtime dentro da VM (via winget) - o app e self-contained,
-    # mas isso garante que o FlaUI/UIA3 e dependencias de UI funcionem.
     try {
         Invoke-Command -VMName $VMName -Credential $cred -ScriptBlock {
             New-Item -ItemType Directory -Force "C:\TempPDV" | Out-Null
-            # habilita execucao de scripts e o UI Automation (ja vem no Windows).
             Set-ExecutionPolicy -Scope LocalMachine Bypass -Force -ErrorAction SilentlyContinue
         } -ErrorAction Stop
         Ok "PowerShell Direct funcionando (guest respondeu)."
     } catch {
         throw "Nao consegui falar com o guest via PowerShell Direct. Confira o usuario/senha e se o Windows da VM esta logado. Detalhe: $($_.Exception.Message)"
     }
+
+    # Instala o .NET 8 SDK DENTRO da VM (para rodar 'dotnet test' com a bateria FlaUI completa).
+    # A VM tem rede; usamos o instalador oficial do dotnet (dotnet-install). Idempotente.
+    if (-not $PularSdk) {
+        Info "Instalando o .NET 8 SDK dentro da VM (pode levar alguns minutos)..."
+        try {
+            Invoke-Command -VMName $VMName -Credential $cred -ScriptBlock {
+                if (Get-Command dotnet -ErrorAction SilentlyContinue) {
+                    $v = (& dotnet --list-sdks) 2>$null
+                    if ($v -match '^8\.') { return "ja instalado" }
+                }
+                [Net.ServicePointManager]::SecurityProtocol = [Net.SecurityProtocolType]::Tls12
+                $ps1 = "$env:TEMP\dotnet-install.ps1"
+                Invoke-WebRequest "https://dot.net/v1/dotnet-install.ps1" -OutFile $ps1 -UseBasicParsing
+                & $ps1 -Channel 8.0 -Quality GA -InstallDir "C:\dotnet"
+                # coloca no PATH da MAQUINA (persiste no checkpoint)
+                $cur = [Environment]::GetEnvironmentVariable("Path","Machine")
+                if ($cur -notlike "*C:\dotnet*") {
+                    [Environment]::SetEnvironmentVariable("Path", "$cur;C:\dotnet", "Machine")
+                }
+                return "instalado"
+            } -ErrorAction Stop | ForEach-Object { Ok ".NET SDK na VM: $_" }
+        } catch {
+            Info "Nao consegui instalar o SDK na VM ($($_.Exception.Message.Split('.')[0])). O orquestrador cai no smoke test."
+        }
+    }
+
+    # AUTO-LOGIN do usuario 'pdv': assim, toda vez que o checkpoint restaurar, a VM sobe JA
+    # LOGADA na area de trabalho — o PowerShell Direct e o FlaUI funcionam sem intervencao.
+    Info "Configurando auto-login do usuario '$GuestUser' na VM..."
+    try {
+        Invoke-Command -VMName $VMName -Credential $cred -ArgumentList $GuestUser, $GuestPass -ScriptBlock {
+            param($u, $p)
+            $k = "HKLM:\SOFTWARE\Microsoft\Windows NT\CurrentVersion\Winlogon"
+            Set-ItemProperty $k -Name AutoAdminLogon -Value "1"
+            Set-ItemProperty $k -Name DefaultUserName -Value $u
+            Set-ItemProperty $k -Name DefaultPassword -Value $p -Type String
+            Set-ItemProperty $k -Name DefaultDomainName -Value $env:COMPUTERNAME
+        } -ErrorAction Stop
+        Ok "Auto-login configurado."
+    } catch { Info "Nao consegui configurar auto-login: $($_.Exception.Message.Split('.')[0])" }
 
     # desliga e tira o checkpoint BASE (estado virgem que o orquestrador restaura).
     Info "Desligando a VM para o checkpoint base..."
