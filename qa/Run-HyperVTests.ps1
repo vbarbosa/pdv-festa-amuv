@@ -28,7 +28,7 @@ param(
     [string]$SetupPath     = "",     # default: release\Setup_PDVFestaJunina.exe
     [string]$TestsDir      = "",     # default: tests\PdvFesta.E2E\bin\Debug\net8.0-windows
     [string]$RelatorioBase = "",     # default: <repo>\test-reports
-    [int]   $BootTimeoutSeg = 90
+    [int]   $BootTimeoutSeg = 180
 )
 
 $ErrorActionPreference = "Stop"
@@ -119,7 +119,9 @@ try {
         if (Test-Path $dll) {
             $env:PDV_E2E_EVID = "C:\TempPDV\evidencias"
             L "Rodando E2E (FlaUI) com evidencias em $env:PDV_E2E_EVID ..."
+            # o SDK foi instalado em C:\dotnet (pode nao estar no PATH da sessao PSDirect).
             $dotnet = (Get-Command dotnet -ErrorAction SilentlyContinue).Source
+            if (-not $dotnet -and (Test-Path "C:\dotnet\dotnet.exe")) { $dotnet = "C:\dotnet\dotnet.exe" }
             if ($dotnet) {
                 & $dotnet test $dll --nologo 2>&1 | Tee-Object -FilePath $log -Append
                 L "dotnet test exit=$LASTEXITCODE"
