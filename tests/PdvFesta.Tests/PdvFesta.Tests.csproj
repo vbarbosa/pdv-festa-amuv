@@ -5,6 +5,8 @@
     <ImplicitUsings>enable</ImplicitUsings>
     <Nullable>enable</Nullable>
     <IsPackable>false</IsPackable>
+    <!-- referencia o App (WinForms) para testar logica de Servico/Permissoes/Discovery -->
+    <UseWindowsForms>true</UseWindowsForms>
   </PropertyGroup>
 
   <ItemGroup>
@@ -15,6 +17,7 @@
 
   <ItemGroup>
     <ProjectReference Include="..\..\src\PdvFesta.Core\PdvFesta.Core.csproj" />
+    <ProjectReference Include="..\..\src\PdvFesta.App\PdvFesta.App.csproj" />
   </ItemGroup>
 
 </Project>
