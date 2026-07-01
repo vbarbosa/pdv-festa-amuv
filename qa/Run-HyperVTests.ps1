@@ -68,8 +68,13 @@ try {
     Info "Criando checkpoint temporario '$checkpointTmp'..."
     Checkpoint-VM -Name $VMName -SnapshotName $checkpointTmp
 
-    Info "Ligando a VM..."
+    Info "Ligando a VM (HEADLESS - sem janela; roda em background)..."
     Start-VM -Name $VMName
+    # HEADLESS: fecha qualquer janela de conexao (VMConnect) que possa estar aberta, para
+    # a VM operar 100% em background sem atrapalhar o host. O orquestrador controla a VM
+    # via PowerShell Direct (nao precisa de janela visivel).
+    Get-Process vmconnect -ErrorAction SilentlyContinue | Stop-Process -Force -ErrorAction SilentlyContinue
+
     # espera o PowerShell Direct responder (guest logado e pronto)
     $prontos = $false
     for ($i = 0; $i -lt $BootTimeoutSeg; $i += 5) {
@@ -81,18 +86,30 @@ try {
     Ok "VM pronta."
 
     # ---------------------------------------------------------------- 2) injeta artefatos (host -> guest)
-    Info "Injetando artefatos na VM (C:\TempPDV)..."
+    Info "Preparando o guest para receber arquivos..."
     Invoke-Command -VMName $VMName -Credential $cred -ScriptBlock {
         Remove-Item C:\TempPDV -Recurse -Force -ErrorAction SilentlyContinue
         New-Item -ItemType Directory -Force C:\TempPDV, C:\TempPDV\tests, C:\TempPDV\evidencias | Out-Null
+        # garante o servico de Guest Services (vmicguestinterface) rodando dentro da VM.
+        Set-Service vmicguestinterface -StartupType Automatic -ErrorAction SilentlyContinue
+        Start-Service vmicguestinterface -ErrorAction SilentlyContinue
     }
-    Copy-VMFile -Name $VMName -SourcePath $SetupPath -DestinationPath "C:\TempPDV\Setup_PDVFestaJunina.exe" -CreateFullPath -FileSource Host -Force
+    # Copy-VMFile depende do Guest Service Interface, que demora a ficar pronto apos o boot
+    # (erro 0x80070015 "dispositivo nao esta pronto"). Faz retry ate 6x com pausa.
+    function CopiarComRetry($src, $dst) {
+        for ($t = 1; $t -le 6; $t++) {
+            try { Copy-VMFile -Name $VMName -SourcePath $src -DestinationPath $dst -CreateFullPath -FileSource Host -Force -ErrorAction Stop; return }
+            catch { if ($t -eq 6) { throw }; Start-Sleep 10 }
+        }
+    }
+    Info "Injetando artefatos na VM (C:\TempPDV)... (aguardando Guest Services)"
+    CopiarComRetry $SetupPath "C:\TempPDV\Setup_PDVFestaJunina.exe"
     Ok "Setup injetado."
     # binarios de teste E2E (FlaUI) - copia a pasta inteira de saida do build de teste
     if (Test-Path $TestsDir) {
         Get-ChildItem $TestsDir -File -Recurse | ForEach-Object {
             $rel = $_.FullName.Substring($TestsDir.Length).TrimStart('\')
-            Copy-VMFile -Name $VMName -SourcePath $_.FullName -DestinationPath "C:\TempPDV\tests\$rel" -CreateFullPath -FileSource Host -Force
+            CopiarComRetry $_.FullName "C:\TempPDV\tests\$rel"
         }
         Ok "Binarios de teste E2E injetados."
     } else {
