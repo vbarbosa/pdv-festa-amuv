@@ -37,11 +37,25 @@ public abstract class E2ETestBase : IDisposable
     protected E2ETestBase()
     {
         MatarTodosOsApps();   // limpa orfaos ANTES de comecar (porteiro de entrada)
+        ExePath = ResolverExe();
+    }
+
+    /// <summary>
+    /// Acha o PDV-Festa-AMUV.exe testando, em ordem: (1) o app INSTALADO pelo Setup
+    /// (%LocalAppData%\Programs\FestaJuninaPDV) — caso da sandbox Hyper-V; (2) o build do
+    /// repositorio (uso local). Assim o mesmo teste roda na VM e no dev sem ajuste.
+    /// </summary>
+    private static string ResolverExe()
+    {
+        var instalado = Path.Combine(
+            Environment.GetFolderPath(Environment.SpecialFolder.LocalApplicationData),
+            "Programs", "FestaJuninaPDV", "PDV-Festa-AMUV.exe");
+        if (File.Exists(instalado)) return instalado;
 
         var baseDir = AppContext.BaseDirectory;
         var repoRoot = Path.GetFullPath(Path.Combine(baseDir, "..", "..", "..", "..", ".."));
-        ExePath = Path.Combine(repoRoot, "src", "PdvFesta.App", "bin", "Debug",
-                               "net8.0-windows", "win-x64", "PDV-Festa-AMUV.exe");
+        return Path.Combine(repoRoot, "src", "PdvFesta.App", "bin", "Debug",
+                            "net8.0-windows", "win-x64", "PDV-Festa-AMUV.exe");
     }
 
     /// <summary>Mata TODO processo do PDV na maquina — porteiro contra janela orfa.</summary>
