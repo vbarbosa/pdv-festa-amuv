@@ -41,21 +41,26 @@ public sealed class TourCompletoE2ETests : E2ETestBase
         {
             janela.Focus();
             Thread.Sleep(400);
-            // categoria + item + Enter, repetido (uso intensivo dos atalhos)
+            // categoria + item + Enter, repetido (uso intensivo dos atalhos). Cada venda leva
+            // uma quantidade diferente de itens para os screenshots ficarem distintos.
             DigitarSequencia("b", VirtualKeyShort.ENTER);      // 1a Bebida
             DigitarSequencia("c", VirtualKeyShort.ENTER);      // 1a Comida
+            for (int extra = 0; extra < venda; extra++)        // itens a mais por venda (0,1,2)
+                DigitarSequencia("c", VirtualKeyShort.ENTER);
             Thread.Sleep(300);
+            Evidencia($"02-venda-{venda + 1}-carrinho");       // COM itens no carrinho
+
             Keyboard.Press(VirtualKeyShort.F2);                // pagar
             Thread.Sleep(600);
             var txt = RetentarAcharDesktop(automation, "txtRecebido");
             if (txt is not null)
             {
                 txt.AsTextBox().Enter("50,00");
-                Thread.Sleep(200);
+                Thread.Sleep(300);
+                Evidencia($"03-venda-{venda + 1}-pagamento");  // tela de pagamento COM troco
                 Keyboard.Type(VirtualKeyShort.ENTER);
                 Thread.Sleep(700);
             }
-            Evidencia($"02-venda-{venda + 1}");
         }
 
         // ---- ESC limpa carrinho (comeca uma venda e cancela) ----
