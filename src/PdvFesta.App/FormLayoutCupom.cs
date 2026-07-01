@@ -18,6 +18,7 @@ public sealed class FormLayoutCupom : Form
     private readonly TextBox _txtSubtitulo = new();
     private readonly RadioButton _rbCompleto = new();
     private readonly RadioButton _rbFicha = new();
+    private readonly RadioButton _rbVales = new();
     private readonly CheckBox _chkSeparar = new();
     private readonly TextBox _txtRodape = new();
     private readonly TextBox _preview = new();
@@ -49,8 +50,10 @@ public sealed class FormLayoutCupom : Form
 
         _rbCompleto.Text = "Recibo Completo (valores, total, troco)";
         _rbCompleto.CheckedChanged += (s, e) => { AtualizarEstado(); AtualizarPreview(); };
-        _rbFicha.Text = "Ficha de Consumo (so item, fonte grande)";
+        _rbFicha.Text = "Ficha de Consumo (só item, fonte grande)";
         _rbFicha.CheckedChanged += (s, e) => { AtualizarEstado(); AtualizarPreview(); };
+        _rbVales.Text = "Recibo + Vales destacáveis (1 ficha por unidade)";
+        _rbVales.CheckedChanged += (s, e) => { AtualizarEstado(); AtualizarPreview(); };
 
         _chkSeparar.Text = "Cortar / separar 1 ficha por item";
         _chkSeparar.CheckedChanged += (s, e) => AtualizarPreview();
@@ -76,7 +79,7 @@ public sealed class FormLayoutCupom : Form
         {
             Titulo("CABECALHO"), Rotulo("Nome do evento:"), _txtEvento,
             Rotulo("Subtitulo (ex: Caixa 01):"), _txtSubtitulo,
-            Titulo("MODO DE IMPRESSAO"), _rbCompleto, _rbFicha, _chkSeparar,
+            Titulo("MODO DE IMPRESSÃO"), _rbCompleto, _rbFicha, _rbVales, _chkSeparar,
             Titulo("RODAPE"), _txtRodape, btnSalvar
         };
         foreach (var c in ordenados) { c.Width = 344; fluxo.Controls.Add(c); }
@@ -120,6 +123,7 @@ public sealed class FormLayoutCupom : Form
         _txtSubtitulo.Text = c.Subtitulo;
         _rbCompleto.Checked = c.Modo == ModoCupom.Completo;
         _rbFicha.Checked = c.Modo == ModoCupom.FichaConsumo;
+        _rbVales.Checked = c.Modo == ModoCupom.ReciboComVales;
         _chkSeparar.Checked = c.SepararPorItem;
         _txtRodape.Text = c.Rodape;
         AtualizarEstado();
@@ -129,7 +133,9 @@ public sealed class FormLayoutCupom : Form
     {
         Evento = _txtEvento.Text,
         Subtitulo = _txtSubtitulo.Text,
-        Modo = _rbFicha.Checked ? ModoCupom.FichaConsumo : ModoCupom.Completo,
+        Modo = _rbFicha.Checked ? ModoCupom.FichaConsumo
+             : _rbVales.Checked ? ModoCupom.ReciboComVales
+             : ModoCupom.Completo,
         SepararPorItem = _chkSeparar.Checked,
         Rodape = _txtRodape.Text
     };

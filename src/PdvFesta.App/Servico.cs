@@ -33,6 +33,14 @@ public sealed class Servico : IDisposable
         }
         TituloCupom = Repo.LerConfig("titulo_cupom", "FESTA");
 
+        // PLUG-AND-PLAY: sem impressora configurada, tenta detectar a termica automaticamente
+        // (USB tem prioridade sobre Bluetooth). Assim, ao plugar e abrir, o caixa ja imprime.
+        if (!TemImpressora)
+        {
+            var auto = PrinterDiscovery.SugerirTermica();
+            if (!string.IsNullOrWhiteSpace(auto)) DefinirImpressora(auto);
+        }
+
         // Retoma um turno que ficou aberto (ex: queda de energia no meio da festa).
         TurnoAtual = Repo.CaixaAberto();
 
@@ -89,6 +97,9 @@ public sealed class Servico : IDisposable
     }
 
     public string ImpressoraPadrao => Repo.LerConfig("impressora", "");
+
+    /// <summary>Ha uma impressora configurada? (sem ela, o caixa NAO deve travar em popup.)</summary>
+    public bool TemImpressora => !string.IsNullOrWhiteSpace(ImpressoraPadrao);
     public void DefinirImpressora(string nome) => Repo.SalvarConfig("impressora", nome);
 
     // ----- configuracao do cupom -----
@@ -119,6 +130,25 @@ public sealed class Servico : IDisposable
         TurnoAtual = null;
         Log.Info($"Caixa FECHADO #{id}");
     }
+
+    /// <summary>
+    /// TROCA DE OPERADOR: fecha o turno atual (com sua Leitura Z / audit) e abre um novo
+    /// para o proximo operador, SEM parar a festa. O fundo do novo turno e o dinheiro que
+    /// fica na gaveta (por padrao, o Total em Gaveta contado/esperado do turno que fechou).
+    /// Retorna o novo turno.
+    /// </summary>
+    public Turno TrocarOperador(string novoOperador, int fundoNovoCentavos)
+    {
+        var anterior = TurnoAtual?.Id;
+        FecharCaixa();
+        var novo = AbrirCaixa(fundoNovoCentavos, novoOperador);
+        Log.Info($"TROCA DE OPERADOR: turno #{anterior} -> #{novo.Id} operador='{novoOperador}' fundo={fundoNovoCentavos}c");
+        return novo;
+    }
+
+    /// <summary>Bate a gaveta do turno atual contra o valor CONTADO fisicamente (conferencia).</summary>
+    public ResultadoBatimento BaterGaveta(int contadoCentavos) =>
+        Caixa.Bater(ResumoTurnoAtual(), contadoCentavos);
 
     public void RegistrarMovimento(TipoMovimento tipo, int valorCentavos, string motivo)
     {
@@ -180,9 +210,17 @@ public sealed class Servico : IDisposable
         return (venda, ok, msg);
     }
 
+    /// <summary>
+    /// MODO DEMONSTRACAO (gravacao do video): PDV_DEMO=1 faz o app fingir que imprimiu
+    /// com sucesso, sem tocar em hardware. Assim a demo nunca abre o popup de "erro na
+    /// impressora" — nao ha impressora conectada porque e so uma gravacao.
+    /// </summary>
+    private static bool ModoDemo => Environment.GetEnvironmentVariable("PDV_DEMO") == "1";
+
     /// <summary>Imprime (ou reimprime) o cupom de uma venda usando o layout configurado.</summary>
     public (bool ok, string msg) ImprimirVenda(Venda venda)
     {
+        if (ModoDemo) return (true, "OK (demo)");
         var impressora = ImpressoraPadrao;
         if (string.IsNullOrWhiteSpace(impressora))
             return (false, "Nenhuma impressora configurada (F12).");
@@ -192,6 +230,7 @@ public sealed class Servico : IDisposable
     /// <summary>Imprime a Leitura Z do turno atual.</summary>
     public (bool ok, string msg) ImprimirFechamentoZ(ResumoTurno resumo, IEnumerable<ItemVendido> itens)
     {
+        if (ModoDemo) return (true, "OK (demo)");
         var impressora = ImpressoraPadrao;
         if (string.IsNullOrWhiteSpace(impressora))
             return (false, "Nenhuma impressora configurada (F12).");

@@ -36,15 +36,27 @@ public sealed class DemoMode
         Pausa(2600);
         Frente(janela);
 
-        // ===== CENA 2: adiciona 1x Quentao e 2x Cartela Bingo pelos ATALHOS (1 e 3) =====
-        Keyboard.Type("1"); Pausa(1300);
-        Keyboard.Type("3"); Pausa(1000);
-        Keyboard.Type("3"); Pausa(1600);
+        // ===== CENA 2: NAVEGACAO POR TECLADO (categoria -> item -> Enter) =====
+        // "B" abre Bebidas e destaca o 1o item (Quentao); Enter adiciona. Depois "I" abre
+        // Bingo, "1" destaca a 1a cartela, Enter adiciona -> repete p/ 2 cartelas.
+        Keyboard.Type("b"); Pausa(1300);   // categoria Bebidas (destaca Quentao)
+        Keyboard.Press(VirtualKeyShort.ENTER); Pausa(1200);   // adiciona Quentao
+        Keyboard.Type("i"); Pausa(1100);   // categoria bIngo (B ja usado -> letra I)
+        Keyboard.Type("1"); Pausa(900);    // destaca 1a Cartela Bingo
+        Keyboard.Press(VirtualKeyShort.ENTER); Pausa(1000);   // adiciona 1x
+        Keyboard.Type("i"); Pausa(700);
+        Keyboard.Type("1"); Pausa(700);
+        Keyboard.Press(VirtualKeyShort.ENTER); Pausa(1600);   // adiciona 2x (total)
 
         // ===== CENA 3: F2 -> valor rapido R$50 (Invoke) -> confirmar =====
         Keyboard.Press(VirtualKeyShort.F2); Pausa(1600);
         EsperarDesktop(automation, "btnRapido_5000")?.AsButton().Invoke(); Pausa(2000);   // troco 3000
         EsperarDesktop(automation, "btnConfirmar")?.AsButton().Invoke(); Pausa(2000);
+
+        // BLINDAGEM: em modo demo o app nem tenta imprimir (PDV_DEMO=1), entao o popup
+        // "Impressora" nao deve aparecer. Mas se por qualquer motivo ele surgir, fechamos
+        // (Cancelar) para NUNCA vazar no video. Defesa em profundidade.
+        FecharModalImpressora(automation);
 
         // ===== CENA 4: F9 -> senha 0000 -> dashboard (totais em verde) =====
         Frente(janela);
@@ -59,7 +71,9 @@ public sealed class DemoMode
     }
 
     // ---------- helpers ----------
-    private static void Pausa(int ms) => System.Threading.Thread.Sleep(ms);
+    // Ritmo do video: fator 1.5 deixa cada pausa 50% mais lenta (bem mais facil de acompanhar).
+    private const double RitmoFator = 1.5;
+    private static void Pausa(int ms) => System.Threading.Thread.Sleep((int)(ms * RitmoFator));
 
     private static void Frente(Window janela)
     {
@@ -80,4 +94,22 @@ public sealed class DemoMode
 
     private static AutomationElement? EsperarDesktop(UIA3Automation aut, string automationId, int tentativas = 25) =>
         Esperar(() => aut.GetDesktop().FindFirstDescendant(cf => cf.ByAutomationId(automationId)), tentativas);
+
+    /// <summary>
+    /// Fecha o MessageBox "Impressora" (Cancelar) se ele existir. Em demo o app nao
+    /// deveria abri-lo, mas isto garante que ele nunca fique no video. Nao espera:
+    /// se nao houver modal em ~1s, segue em frente sem atrapalhar o ritmo.
+    /// </summary>
+    private static void FecharModalImpressora(UIA3Automation aut)
+    {
+        var modal = Esperar(() =>
+            aut.GetDesktop().FindFirstChild(cf => cf.ByName("Impressora").And(cf.ByControlType(FlaUI.Core.Definitions.ControlType.Window))),
+            tentativas: 3);
+        if (modal is null) return;
+
+        // botao "Cancelar" do MessageBoxButtons.RetryCancel
+        var cancelar = modal.FindFirstDescendant(cf => cf.ByName("Cancelar"));
+        if (cancelar is not null) { cancelar.AsButton().Invoke(); return; }
+        try { modal.AsWindow().Close(); } catch { }
+    }
 }

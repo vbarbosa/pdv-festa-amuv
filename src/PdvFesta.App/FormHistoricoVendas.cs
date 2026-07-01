@@ -19,7 +19,7 @@ public sealed class FormHistoricoVendas : Form
     public FormHistoricoVendas(Servico servico)
     {
         _servico = servico;
-        Text = "Historico de Vendas do Turno";
+        Text = "Histórico de Vendas do Turno";
         Name = "FormHistoricoVendas";
         Icon = Marca.Icone();
         StartPosition = FormStartPosition.CenterParent;
@@ -39,7 +39,7 @@ public sealed class FormHistoricoVendas : Form
     {
         var titulo = new Label
         {
-            Text = "HISTORICO DE VENDAS", Dock = DockStyle.Top, Height = 44,
+            Text = "HISTÓRICO DE VENDAS", Dock = DockStyle.Top, Height = 44,
             TextAlign = ContentAlignment.MiddleCenter, ForeColor = Color.White,
             BackColor = Color.FromArgb(60, 60, 60), Font = new Font("Segoe UI", 15F, FontStyle.Bold)
         };
@@ -50,6 +50,7 @@ public sealed class FormHistoricoVendas : Form
         _grid.MultiSelect = false; _grid.SelectionMode = DataGridViewSelectionMode.FullRowSelect;
         _grid.RowHeadersVisible = false; _grid.BorderStyle = BorderStyle.None; _grid.BackgroundColor = Color.White;
         _grid.AutoSizeColumnsMode = DataGridViewAutoSizeColumnsMode.Fill;
+        EstiloGrid.Padronizar(_grid);   // cabecalho legivel (sem cortar "Pagamento" etc)
         _grid.Columns.Add("id", "Venda");
         _grid.Columns.Add("hora", "Hora");
         _grid.Columns.Add("total", "Total");
@@ -68,6 +69,11 @@ public sealed class FormHistoricoVendas : Form
 
         var barra = new FlowLayoutPanel { Dock = DockStyle.Bottom, Height = 60, Padding = new Padding(10) };
         barra.Controls.Add(Botao("Atualizar (F5)", Color.FromArgb(70, 70, 90), (s, e) => Carregar()));
+        // Reimprimir: para vendas feitas SEM impressora (ex: comecou a festa sem cabo),
+        // depois de configurar a impressora o operador reimprime a nota daqui.
+        var btnReimprimir = Botao("Reimprimir Nota", Color.FromArgb(0, 110, 60), (s, e) => Reimprimir());
+        btnReimprimir.Name = "btnReimprimirNota"; btnReimprimir.Width = 180;
+        barra.Controls.Add(btnReimprimir);
         var btnCancelar = Botao("Cancelar / Estornar Venda Selecionada", Color.FromArgb(160, 0, 0), (s, e) => Cancelar());
         btnCancelar.Name = "btnCancelarVenda"; btnCancelar.Width = 320;
         barra.Controls.Add(btnCancelar);
@@ -113,6 +119,31 @@ public sealed class FormHistoricoVendas : Form
         _lblResumo.Text = $"Vendas validas: {validas}   |   Canceladas: {canceladas}   |   Bruto valido: {CupomFormatter.Moeda(bruto)}";
     }
 
+    private void Reimprimir()
+    {
+        if (_grid.CurrentRow is null || _grid.CurrentRow.Index < 0 || _grid.CurrentRow.Index >= _vendas.Count)
+        {
+            MessageBox.Show("Selecione uma venda na lista.", Text, MessageBoxButtons.OK, MessageBoxIcon.Information);
+            return;
+        }
+        var venda = _vendas[_grid.CurrentRow.Index];
+
+        if (!_servico.TemImpressora)
+        {
+            MessageBox.Show("Nenhuma impressora configurada.\nConfigure a impressora (F12) e tente de novo.",
+                "Reimprimir", MessageBoxButtons.OK, MessageBoxIcon.Information);
+            return;
+        }
+
+        var (ok, msg) = _servico.ImprimirVenda(venda);
+        if (ok)
+            MessageBox.Show($"Nota da venda #{venda.Id} enviada para a impressora.",
+                "Reimprimir", MessageBoxButtons.OK, MessageBoxIcon.Information);
+        else
+            MessageBox.Show($"Não foi possível imprimir.\nDetalhe: {msg}",
+                "Reimprimir", MessageBoxButtons.OK, MessageBoxIcon.Warning);
+    }
+
     private void Cancelar()
     {
         if (_grid.CurrentRow is null || _grid.CurrentRow.Index < 0 || _grid.CurrentRow.Index >= _vendas.Count)
@@ -123,7 +154,7 @@ public sealed class FormHistoricoVendas : Form
         var venda = _vendas[_grid.CurrentRow.Index];
         if (venda.Cancelada)
         {
-            MessageBox.Show("Essa venda ja esta cancelada.", Text, MessageBoxButtons.OK, MessageBoxIcon.Information);
+            MessageBox.Show("Essa venda já está cancelada.", Text, MessageBoxButtons.OK, MessageBoxIcon.Information);
             return;
         }
 
@@ -132,7 +163,7 @@ public sealed class FormHistoricoVendas : Form
 
         var r = MessageBox.Show(
             $"Cancelar a venda #{venda.Id} ({CupomFormatter.Moeda(venda.TotalCentavos)} - {CupomFormatter.NomeForma(venda.Forma)})?\n\n" +
-            "O estorno na maquininha de cartao ou a devolucao do dinheiro fisico\n" +
+            "O estorno na maquininha de cartão ou a devolução do dinheiro físico\n" +
             "DEVE ser feito manualmente.\n\n" +
             "Deseja registrar este cancelamento no sistema?",
             "Estorno de Venda", MessageBoxButtons.YesNo, MessageBoxIcon.Warning);
@@ -140,7 +171,7 @@ public sealed class FormHistoricoVendas : Form
 
         _servico.CancelarVenda(venda.Id);
         Carregar();
-        MessageBox.Show("Venda cancelada. Os totais do caixa ja foram ajustados.",
+        MessageBox.Show("Venda cancelada. Os totais do caixa já foram ajustados.",
             "Estorno", MessageBoxButtons.OK, MessageBoxIcon.Information);
     }
 }

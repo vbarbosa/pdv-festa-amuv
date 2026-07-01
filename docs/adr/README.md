@@ -20,3 +20,8 @@ de Michael Nygard.
 | [0012](0012-formas-pagamento-estaveis.md) | Valores do enum de pagamento estáveis e aditivos | Aceito |
 | [0013](0013-estorno-audit-trail.md) | Estorno de venda por soft delete (audit trail) | Aceito |
 | [0014](0014-motor-de-precos.md) | Motor de preços (combos/promoções auto-detectados) | Aceito |
+| [0015](0015-fichas-vales-destacaveis.md) | Fichas de consumo destacáveis (modelo quermesse) | Aceito |
+| [0016](0016-navegacao-teclado-categoria-item.md) | Navegação por teclado: categoria → item → Enter | Aceito |
+| [0017](0017-impressao-sem-acento-e-robustez.md) | Impressão sem acento + robustez plug-and-play da impressora | Aceito |
+| [0018](0018-hardening-ui-e-video-demo.md) | Hardening de UI, testes E2E e vídeo de demonstração | Aceito |
+| [0019](0019-troca-operador-batimento.md) | Troca de operador com batimento de caixa opcional | Aceito |

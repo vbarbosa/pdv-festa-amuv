@@ -21,7 +21,7 @@ public sealed class FormBackup : Form
     public FormBackup(Servico servico)
     {
         _servico = servico;
-        Text = "Seguranca de Dados - Backup e Restauracao";
+        Text = "Segurança de Dados - Backup e Restauração";
         Icon = Marca.Icone();
         StartPosition = FormStartPosition.CenterParent;
         FormBorderStyle = FormBorderStyle.FixedDialog;
@@ -37,20 +37,20 @@ public sealed class FormBackup : Form
     {
         var titulo = new Label
         {
-            Text = "SEGURANCA DE DADOS", Dock = DockStyle.Top, Height = 44,
+            Text = "SEGURANÇA DE DADOS", Dock = DockStyle.Top, Height = 44,
             TextAlign = ContentAlignment.MiddleCenter,
             Font = new Font("Segoe UI", 15F, FontStyle.Bold),
             BackColor = Color.FromArgb(60, 60, 60), ForeColor = Color.White
         };
 
         // --- Pasta secundaria ---
-        var lblPasta = new Label { Text = "Pasta de backup secundaria (ex: OneDrive):", Location = new Point(20, 60), AutoSize = true };
+        var lblPasta = new Label { Text = "Pasta de backup secundária (ex: OneDrive):", Location = new Point(20, 60), AutoSize = true };
         _txtPasta.Location = new Point(20, 88); _txtPasta.Width = 420; _txtPasta.ReadOnly = true;
         var btnEscolher = new Button { Text = "Escolher...", Location = new Point(450, 86), Width = 90, Height = 28 };
         btnEscolher.Click += (s, e) => EscolherPasta();
 
         // --- Intervalo auto-backup ---
-        var lblInt = new Label { Text = "Backup automatico a cada (min, 0 = desligado):", Location = new Point(20, 130), AutoSize = true };
+        var lblInt = new Label { Text = "Backup automático a cada (min, 0 = desligado):", Location = new Point(20, 130), AutoSize = true };
         _numMin.Location = new Point(20, 158); _numMin.Width = 100; _numMin.Minimum = 0; _numMin.Maximum = 240;
         _numMin.Font = new Font("Segoe UI", 13F, FontStyle.Bold);
         var btnAplicar = new Button { Text = "Aplicar intervalo", Location = new Point(140, 156), Width = 160, Height = 30 };
@@ -107,8 +107,8 @@ public sealed class FormBackup : Form
         _servico.DefinirIntervaloBackup((int)_numMin.Value);
         _lblStatus.ForeColor = Color.FromArgb(0, 120, 0);
         _lblStatus.Text = _numMin.Value == 0
-            ? "Backup automatico DESLIGADO."
-            : $"Backup automatico a cada {_numMin.Value} min ATIVADO.";
+            ? "Backup automático DESLIGADO."
+            : $"Backup automático a cada {_numMin.Value} min ATIVADO.";
     }
 
     private void BackupAgora()
@@ -138,7 +138,7 @@ public sealed class FormBackup : Form
     {
         var confirma = MessageBox.Show(
             "Restaurar vai SUBSTITUIR o banco atual pelo backup selecionado.\n" +
-            "O banco atual sera guardado como .bak antes.\n\nO programa sera reiniciado. Continuar?",
+            "O banco atual será guardado como .bak antes.\n\nO programa será reiniciado. Continuar?",
             "Restaurar Backup", MessageBoxButtons.YesNo, MessageBoxIcon.Warning);
         if (confirma != DialogResult.Yes) return;
 
@@ -151,7 +151,7 @@ public sealed class FormBackup : Form
         try
         {
             BackupManager.RestaurarAuto(dlg.FileName, _servico.CaminhoBanco);
-            MessageBox.Show("Backup restaurado! O programa vai reiniciar.", "Restauracao",
+            MessageBox.Show("Backup restaurado! O programa vai reiniciar.", "Restauração",
                 MessageBoxButtons.OK, MessageBoxIcon.Information);
             Application.Restart();
             Environment.Exit(0);

@@ -51,9 +51,36 @@ public sealed class ResumoTurno
         FundoCentavos + Vendas.TotalDinheiroCentavos + SuprimentosCentavos - SangriasCentavos;
 }
 
+/// <summary>
+/// Conferencia de gaveta (batimento) na troca de operador / fechamento. Compara o dinheiro
+/// CONTADO fisicamente com o ESPERADO (Total em Gaveta), apontando sobra ou falta.
+/// </summary>
+public sealed class ResultadoBatimento
+{
+    /// <summary>Dinheiro que o sistema esperava na gaveta (Total em Gaveta do turno).</summary>
+    public required int EsperadoCentavos { get; init; }
+    /// <summary>Dinheiro que o operador realmente contou na gaveta.</summary>
+    public required int ContadoCentavos { get; init; }
+
+    /// <summary>Contado - Esperado. Positivo = SOBRA; negativo = FALTA; zero = bate certinho.</summary>
+    public int DiferencaCentavos => ContadoCentavos - EsperadoCentavos;
+    public bool Bate => DiferencaCentavos == 0;
+    public bool Sobra => DiferencaCentavos > 0;
+    public bool Falta => DiferencaCentavos < 0;
+}
+
 /// <summary>Regras puras de caixa: troco, consolidacao e turno. Sem estado, faceis de testar.</summary>
 public static class Caixa
 {
+    /// <summary>
+    /// Bate a gaveta: compara o CONTADO com o ESPERADO (Total em Gaveta) do turno. Puro.
+    /// </summary>
+    public static ResultadoBatimento Bater(ResumoTurno resumo, int contadoCentavos) => new()
+    {
+        EsperadoCentavos = resumo.TotalGavetaCentavos,
+        ContadoCentavos = contadoCentavos
+    };
+
     /// <summary>
     /// Troco em centavos. Se recebido &lt; total, lanca PagamentoInsuficienteException.
     /// </summary>

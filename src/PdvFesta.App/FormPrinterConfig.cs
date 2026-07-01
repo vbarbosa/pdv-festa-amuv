@@ -19,7 +19,7 @@ public sealed class FormPrinterConfig : Form
     {
         _servico = servico;
 
-        Text = "Configuracao da Impressora";
+        Text = "Configuração da Impressora";
         Name = "FormPrinterConfig";
         Icon = Marca.Icone();
         StartPosition = FormStartPosition.CenterParent;
@@ -64,7 +64,7 @@ public sealed class FormPrinterConfig : Form
 
         var btnSalvar = new Button
         {
-            Text = "Salvar Configuracao", Dock = DockStyle.Fill, Margin = new Padding(0, 8, 6, 8),
+            Text = "Salvar Configuração", Dock = DockStyle.Fill, Margin = new Padding(0, 8, 6, 8),
             BackColor = Color.FromArgb(0, 120, 200), ForeColor = Color.White,
             FlatStyle = FlatStyle.Flat, Font = new Font("Segoe UI", 12F, FontStyle.Bold)
         };
@@ -124,7 +124,7 @@ public sealed class FormPrinterConfig : Form
         }
         _servico.DefinirImpressora(nome);
         _lblStatus.ForeColor = Color.FromArgb(0, 120, 0);
-        _lblStatus.Text = $"Salvo! Impressora padrao: {nome}";
+        _lblStatus.Text = $"Salvo! Impressora padrão: {nome}";
     }
 
     private void ImprimirTeste()

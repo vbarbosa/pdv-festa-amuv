@@ -35,8 +35,8 @@ public sealed class FormFechamento : Form
         Icon = Marca.Icone();
         StartPosition = FormStartPosition.CenterParent;
         FormBorderStyle = FormBorderStyle.Sizable;
-        MinimumSize = new Size(560, 640);
-        ClientSize = new Size(600, 720);
+        MinimumSize = new Size(560, 700);
+        ClientSize = new Size(600, 780);
         Font = new Font("Segoe UI", 12F);
         KeyPreview = true;
 
@@ -67,8 +67,8 @@ public sealed class FormFechamento : Form
         AddLinha(grid, 0, "Fundo inicial:", _lblFundo, Color.FromArgb(80, 80, 80));
         AddLinha(grid, 1, "Dinheiro:", _lblDinheiro, Color.FromArgb(0, 120, 0));
         AddLinha(grid, 2, "Pix:", _lblPix, Color.FromArgb(0, 100, 160));
-        AddLinha(grid, 3, "Debito:", _lblDebito, Color.FromArgb(120, 60, 160));
-        AddLinha(grid, 4, "Credito:", _lblCredito, Color.FromArgb(150, 80, 40));
+        AddLinha(grid, 3, "Débito:", _lblDebito, Color.FromArgb(120, 60, 160));
+        AddLinha(grid, 4, "Crédito:", _lblCredito, Color.FromArgb(150, 80, 40));
 
         var lblGavetaCab = new Label
         {
@@ -104,6 +104,7 @@ public sealed class FormFechamento : Form
         _grid.BorderStyle = BorderStyle.None;
         _grid.BackgroundColor = Color.White;
         _grid.AutoSizeColumnsMode = DataGridViewAutoSizeColumnsMode.Fill;
+        EstiloGrid.Padronizar(_grid);   // cabecalho legivel (sem cortar texto)
         _grid.Columns.Add("prod", "Produto");
         _grid.Columns.Add("qtd", "Qtd");
         _grid.Columns.Add("total", "Total");
@@ -113,9 +114,11 @@ public sealed class FormFechamento : Form
         _grid.Columns["total"]!.DefaultCellStyle.Alignment = DataGridViewContentAlignment.MiddleRight;
 
         // ---- botoes de acao ----
+        // 8 botoes (44px alt + 4px margem) quebram em ate 3 fileiras na largura padrao:
+        // 3 * 52 + 24 (padding) = 180px. Altura 190 => cabe tudo SEM scroll.
         var barra = new FlowLayoutPanel
         {
-            Dock = DockStyle.Bottom, Height = 150, Padding = new Padding(12),
+            Dock = DockStyle.Bottom, Height = 190, Padding = new Padding(12),
             FlowDirection = FlowDirection.LeftToRight, WrapContents = true, AutoScroll = true
         };
         barra.Controls.Add(Botao("Atualizar (F5)", Color.FromArgb(70, 70, 90), (s, e) => Atualizar()));
@@ -143,7 +146,7 @@ public sealed class FormFechamento : Form
         _grafItens.FormatarValor = v => Dinheiro.Formatar((int)v);
         painelGraf.Controls.Add(_grafPagamentos, 0, 0);
         painelGraf.Controls.Add(_grafItens, 0, 1);
-        var tabGraf = new TabPage("Graficos");
+        var tabGraf = new TabPage("Gráficos");
         tabGraf.Controls.Add(painelGraf);
 
         var tabs = new TabControl { Dock = DockStyle.Fill, Font = new Font("Segoe UI", 11F) };
@@ -205,8 +208,8 @@ public sealed class FormFechamento : Form
         {
             ("Dinheiro", v.TotalDinheiroCentavos, Color.FromArgb(0, 150, 0)),
             ("Pix",      v.TotalPixCentavos,      Color.FromArgb(0, 150, 200)),
-            ("Debito",   v.TotalDebitoCentavos,   Color.FromArgb(130, 80, 190)),
-            ("Credito",  v.TotalCreditoCentavos,  Color.FromArgb(220, 130, 40)),
+            ("Débito",   v.TotalDebitoCentavos,   Color.FromArgb(130, 80, 190)),
+            ("Crédito",  v.TotalCreditoCentavos,  Color.FromArgb(220, 130, 40)),
         });
         var cores = new[]
         {
@@ -276,8 +279,8 @@ public sealed class FormFechamento : Form
             sb.AppendLine(Linha("Fundo inicial", Reais(_ultimoResumo.FundoCentavos)));
             sb.AppendLine(Linha("Dinheiro", Reais(v.TotalDinheiroCentavos)));
             sb.AppendLine(Linha("Pix", Reais(v.TotalPixCentavos)));
-            sb.AppendLine(Linha("Debito", Reais(v.TotalDebitoCentavos)));
-            sb.AppendLine(Linha("Credito", Reais(v.TotalCreditoCentavos)));
+            sb.AppendLine(Linha("Débito", Reais(v.TotalDebitoCentavos)));
+            sb.AppendLine(Linha("Crédito", Reais(v.TotalCreditoCentavos)));
             sb.AppendLine(Linha("Suprimentos", Reais(_ultimoResumo.SuprimentosCentavos)));
             sb.AppendLine(Linha("Sangrias", Reais(_ultimoResumo.SangriasCentavos)));
             sb.AppendLine(Linha("TOTAL EM GAVETA", Reais(_ultimoResumo.TotalGavetaCentavos)));
@@ -303,20 +306,20 @@ public sealed class FormFechamento : Form
     {
         if (!_servico.CaixaAberto)
         {
-            MessageBox.Show("O caixa ja esta fechado.", Text, MessageBoxButtons.OK, MessageBoxIcon.Information);
+            MessageBox.Show("O caixa já está fechado.", Text, MessageBoxButtons.OK, MessageBoxIcon.Information);
             return;
         }
         var r = MessageBox.Show(
-            "Fechar o turno de caixa?\n\nSera impressa a Leitura Z e nenhuma nova venda\n" +
-            "podera ser registrada ate abrir um novo caixa.",
+            "Fechar o turno de caixa?\n\nSerá impressa a Leitura Z e nenhuma nova venda\n" +
+            "poderá ser registrada até abrir um novo caixa.",
             "Fechar Caixa", MessageBoxButtons.YesNo, MessageBoxIcon.Question);
         if (r != DialogResult.Yes) return;
 
         Atualizar(); // garante numeros atualizados
         var (ok, msg) = _servico.ImprimirFechamentoZ(_ultimoResumo, _ultimosItens);
         if (!ok)
-            MessageBox.Show("Aviso: a Leitura Z nao imprimiu (" + msg + ").\n" +
-                "Os numeros continuam salvos; use Exportar Excel se precisar.",
+            MessageBox.Show("Aviso: a Leitura Z não imprimiu (" + msg + ").\n" +
+                "Os números continuam salvos; use Exportar Excel se precisar.",
                 "Leitura Z", MessageBoxButtons.OK, MessageBoxIcon.Warning);
 
         _servico.FecharCaixa();

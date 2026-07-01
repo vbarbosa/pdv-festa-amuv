@@ -15,25 +15,19 @@ namespace PdvFesta.E2E;
 /// por padrao; rode manualmente com a impressora ligada removendo o Skip.
 /// </summary>
 [Collection("e2e")]
-public sealed class ImpressaoE2ETests : IDisposable
+public sealed class ImpressaoE2ETests : E2ETestBase
 {
     private const string PortaImpressora = "COM6 (Bluetooth)";
     private readonly string _dbPath;
-    private readonly string _exePath;
-    private Process? _proc;
 
     public ImpressaoE2ETests()
     {
         _dbPath = Path.Combine(Path.GetTempPath(), $"e2eprint_{Guid.NewGuid():N}.db");
-        var baseDir = AppContext.BaseDirectory;
-        var repoRoot = Path.GetFullPath(Path.Combine(baseDir, "..", "..", "..", "..", ".."));
-        _exePath = Path.Combine(repoRoot, "src", "PdvFesta.App", "bin", "Debug",
-                                "net8.0-windows", "win-x64", "PDV-Festa-AMUV.exe");
     }
 
-    public void Dispose()
+    public override void Dispose()
     {
-        try { if (_proc is { HasExited: false }) _proc.Kill(true); } catch { }
+        base.Dispose();
         foreach (var ext in new[] { "", "-wal", "-shm" })
             if (File.Exists(_dbPath + ext)) { try { File.Delete(_dbPath + ext); } catch { } }
     }
@@ -41,7 +35,7 @@ public sealed class ImpressaoE2ETests : IDisposable
     [Fact(Skip = "Requer impressora MPT-II real na COM6. Rodar manualmente com a impressora ligada.")]
     public void Venda_ViaApp_ImprimeNaImpressoraBluetooth()
     {
-        Assert.True(File.Exists(_exePath), $"Compile a App primeiro. Nao achei: {_exePath}");
+        Assert.True(File.Exists(ExePath), $"Compile a App primeiro. Nao achei: {ExePath}");
 
         // Pre-configura a impressora e abre o caixa direto no banco (menos passos de UI fragil).
         using (var repo = new Repositorio(_dbPath))
@@ -53,12 +47,12 @@ public sealed class ImpressaoE2ETests : IDisposable
         Microsoft.Data.Sqlite.SqliteConnection.ClearAllPools();
 
         // Sobe o app (ja com caixa aberto + impressora configurada). Ele semeia o cardapio.
-        var psi = new ProcessStartInfo(_exePath) { UseShellExecute = false };
+        var psi = new ProcessStartInfo(ExePath) { UseShellExecute = false };
         psi.EnvironmentVariables["PDVFESTA_DB"] = _dbPath;
-        _proc = Process.Start(psi)!;
+        Proc = Process.Start(psi)!;
 
         using var automation = new UIA3Automation();
-        var app = FlaUI.Core.Application.Attach(_proc);
+        var app = FlaUI.Core.Application.Attach(Proc);
         var janela = RetentarObterJanela(app, automation);
         Assert.NotNull(janela);
 
@@ -83,7 +77,7 @@ public sealed class ImpressaoE2ETests : IDisposable
         System.Threading.Thread.Sleep(2000);   // deixa a impressora receber os bytes
 
         // valida a venda no banco (o cupom fisico o operador confere no papel)
-        try { if (!_proc.HasExited) _proc.Kill(true); } catch { }
+        try { if (!Proc.HasExited) Proc.Kill(true); } catch { }
         System.Threading.Thread.Sleep(500);
         using var repo2 = new Repositorio(_dbPath);
         repo2.Inicializar();
