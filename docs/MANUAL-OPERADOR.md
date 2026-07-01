@@ -1,74 +1,99 @@
 # Manual do Operador — PDV Festa Junina (Arraiá da AMUV)
 
-Guia rápido para quem vai operar o caixa. **Zero treinamento** — dá pra usar em 10 segundos.
+Guia rápido para quem vai operar o caixa no dia da festa. Não precisa saber de computador.
 
 ---
 
-## 1. Abrir o programa
+## 1. Começando o dia
 
-- Dê dois cliques no atalho **PDV Festa Junina** (Área de Trabalho) ou no `PDV-Festa-AMUV.exe`.
-- A tela do caixa abre em tela cheia.
+1. Dê dois cliques no atalho **PDV Festa Junina** na Área de Trabalho.
+2. Na primeira tela, informe o **Troco Inicial** (o dinheiro que já está na gaveta) e
+   clique **ABRIR CAIXA**. Pode deixar `0,00` se não houver troco inicial.
+   > Sem abrir o caixa, o sistema **não deixa vender**.
+3. A barra de baixo mostra o estado: **Caixa: ABERTO**, **BD: Conectado**, e a **Impressora**.
 
 ## 2. Configurar a impressora (só na primeira vez)
 
-1. Aperte **F12**.
-2. Escolha a impressora térmica na lista (ex: `MPT-II 58mm`).
-3. Clique **Salvar Configuração**.
-4. Clique **Imprimir Teste** — deve sair um cupom "Status OK".
-5. Feche a janela. Pronto, ela lembra a impressora para sempre.
+1. Ligue e conecte a impressora térmica **antes**.
+2. Aperte **F12** → escolha a impressora na lista (ex: `MPT-II 58mm`) → **Salvar** →
+   **Imprimir Teste** (deve sair um cupom "Status OK"). Ela fica lembrada para sempre.
 
-## 3. Fazer uma venda
+## 3. Vendendo (rápido)
 
-**Com o teclado (mais rápido):**
-- Aperte os números **1 a 9** para adicionar os itens mais vendidos.
-  (ex: `1` = Quentão, `2` = Refri, `3` = Cartela de Bingo...)
-- Aperte **F2** (ou Enter) para ir ao pagamento.
+- Clique na **aba** da categoria (Comidas, Bebidas, Bingo...) ou na aba **Todos**.
+- Clique no produto para adicioná-lo ao carrinho (à direita). O **TOTAL** aparece gigante.
+- Mais rápido: use os **números 1 a 9** do teclado (o número aparece no canto do botão).
+- Errou? Selecione a linha no carrinho e aperte **Delete**. Para limpar tudo: **Esc**.
 
-**Com o mouse/touch:**
-- Clique nos botões grandes dos produtos. Eles vão para o carrinho à direita.
-- Clique em **PAGAR**.
+### Pagamento
+- Aperte **F2** (ou o botão verde **PAGAR**).
+- Escolha a forma: **D** = Dinheiro, **P** = Pix, **B** = Débito, **C** = Crédito.
+  - **Dinheiro:** digite quanto o cliente deu; o **TROCO** aparece na hora. Há botões de
+    valor rápido (Exato, R$ 20, R$ 50, R$ 100).
+  - **Pix/Cartão:** o valor já vem preenchido; é só confirmar.
+- **Enter** confirma. O cupom sai na impressora.
 
-## 4. Receber o pagamento
+> **Se a impressora falhar** (sem papel, cabo solto): não se preocupe — **a venda já foi
+> registrada**. O sistema pergunta se quer **Repetir** a impressão ou **Ignorar**.
 
-Na tela de pagamento:
-- Escolha a forma: **D** = Dinheiro, **P** = Pix, **C** = Cartão.
-- **Dinheiro:** digite o valor que o cliente deu → o **TROCO aparece grande** na hora.
-- Aperte **Enter** (ou CONFIRMAR).
-- O cupom é impresso automaticamente. 🎉
+## 4. Atalhos do teclado
 
-> Deu errado o pagamento? Aperte **Esc** para voltar.
+| Tecla | Ação |
+|-------|------|
+| `1`–`9` | Adiciona o produto do atalho |
+| `F2` / `Enter` | Ir para o pagamento |
+| `Esc` | Limpar o carrinho |
+| `Delete` | Remover o item selecionado do carrinho |
+| `F8` | Backup / Restauração (pede senha) |
+| `F9` | Fechamento de caixa (pede senha) |
+| `F12` | Configurar impressora (pede senha) |
 
-## 5. Limpar / cancelar uma venda
+## 5. Durante a festa (tesoureiro)
 
-- Aperte **Esc** na tela do caixa para esvaziar o carrinho.
-- Para remover **um** item: selecione no carrinho e aperte **Delete**.
+Telas protegidas por **senha de administrador** (padrão: **0000**).
 
-## 6. Fechamento de caixa (tesoureiro)
+- **Sangria** (menu Ferramentas): tirou dinheiro da gaveta por segurança? Registre.
+- **Suprimento** (menu Ferramentas): colocou troco na gaveta? Registre.
+- **Acabou um produto?** Configurações → **Gerenciar Produtos** → selecione → **Inativar**.
+  Ele some da tela do caixa na hora (o histórico é preservado).
+- **Mudou um preço?** Mesma tela: selecione, ajuste o preço, **Salvar**. O próximo clique
+  já usa o valor novo.
+- **Reorganizar abas?** Configurações → **Gerenciar Categorias** (ordem e ativar/ocultar).
 
-- Aperte **F9**.
-- Aparece o **RESUMO**: total em Dinheiro, Pix, Cartão, número de vendas e o
-  **Faturamento Bruto**. Clique em **Atualizar** para ver em tempo real.
+## 6. Fechando o caixa (fim da noite)
 
-## 7. Segurança dos dados (backup)
+1. Aperte **F9** (ou menu Arquivo → Fechamento). Digite a senha.
+2. Confira o **RESUMO**: Dinheiro, Pix, Débito, Crédito e o **TOTAL EM GAVETA**
+   (é quanto de dinheiro físico deve haver na gaveta).
+3. Aba **Gráficos**: veja vendas por pagamento e itens mais vendidos.
+4. **Exportar Excel (CSV)** — salva uma planilha na Área de Trabalho para conferir depois.
+5. **FECHAR CAIXA** — imprime a **Leitura Z** (relatório com os itens vendidos) e encerra o
+   turno. Para vender de novo, é preciso abrir um novo caixa.
 
-- Aperte **F8**.
-- **Escolher pasta**: aponte para uma pasta do OneDrive/Drive (backup na nuvem).
-- **Backup automático**: coloque, por exemplo, `10` minutos e clique Aplicar.
-- **Gerar Backup Agora**: cria um `.zip` de segurança quando quiser.
-- **Restaurar Backup**: se o PC quebrar, instale o programa em outro, aperte F8 →
-  Restaurar → escolha o `.zip`/`.db` do backup. O caixa **continua de onde parou**.
+## 7. Layout do cupom (economizar papel)
 
----
+Em **Configurações → Layout do Cupom** você escolhe:
+- **Recibo Completo** (com valores) ou **Ficha de Consumo** (só o produto, em letra grande,
+  para a barraca ler rápido e gastar menos papel).
+- **Cortar/separar por item** (quando itens são de barracas diferentes).
+- O **preview** mostra como vai sair antes de imprimir.
 
-## Problemas comuns
+## 8. Segurança dos dados (backup)
+
+- Aperte **F8**. Aponte uma **pasta** do OneDrive/Drive e um **intervalo** de auto-backup.
+- **Gerar Backup Agora** cria um `.zip`. **Restaurar Backup** recupera em outro PC — o caixa
+  **continua de onde parou**.
+
+## 9. Problemas comuns
 
 | Problema | O que fazer |
 |----------|-------------|
-| Cupom não sai | F12 → confira a impressora selecionada → Imprimir Teste |
+| Cupom não sai | F12 → confira a impressora → Imprimir Teste (a venda já ficou salva) |
 | Impressora sumiu da lista | Verifique cabo USB / se está ligada → F12 → Atualizar |
-| Trocaram de operador | Não precisa fazer nada, é só continuar vendendo |
+| "O caixa está fechado" ao pagar | Menu **Arquivo → Abrir Caixa** |
 | PC travou/desligou | Reabra o programa — nenhuma venda é perdida (banco seguro) |
-| Precisa mudar de PC | F8 no PC velho → Gerar Backup; no PC novo → F8 → Restaurar |
+| Precisa mudar de PC | F8 no PC velho → Backup; no PC novo → F8 → Restaurar |
+| Esqueci a senha de admin | Padrão de fábrica: **0000** |
 
 ---
 

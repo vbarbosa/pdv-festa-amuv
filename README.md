@@ -20,6 +20,18 @@ Um único `.exe` autossuficiente, com impressão de cupom em impressora térmica
 
 ---
 
+## ✨ O que o sistema faz
+
+- **Frente de caixa** clássica: catálogo em **abas por categoria** (+ aba "Todos"), carrinho
+  em grade, **TOTAL gigante**, operação por teclado.
+- **Turno de caixa**: abertura com fundo, **sangria/suprimento**, fechamento com **dashboard
+  + gráficos**, **Total em Gaveta**, **Leitura Z** impressa e **exportação CSV**.
+- **Pagamentos**: Dinheiro (troco ao vivo + valores rápidos), Pix, Débito, Crédito.
+- **Gestão**: CRUD de **Produtos** (soft delete) e **Categorias** (ordem/ocultar),
+  **atalhos** customizáveis, **layout do cupom** com **preview ao vivo** (recibo completo ou
+  ficha de consumo econômica).
+- **Blindagem**: senha de admin, impressão à prova de falha, **logs** e captura global de erros.
+
 ## ⌨️ Atalhos (operação sem mouse)
 
 | Tecla | Ação |
@@ -27,19 +39,24 @@ Um único `.exe` autossuficiente, com impressão de cupom em impressora térmica
 | `1`–`9` | Adiciona o produto do atalho (Quentão, Refri, Bingo...) |
 | `F2` / `Enter` | Ir para o pagamento |
 | `Esc` | Limpar o carrinho / cancelar |
+| `Delete` | Remover o item selecionado |
 | `F8` | Segurança de dados (backup / restaurar) |
 | `F9` | Fechamento de caixa (dashboard do tesoureiro) |
 | `F12` | Configuração da impressora |
-| Na tela de pagamento: `D`/`P`/`C` | Dinheiro / Pix / Cartão |
+| Na tela de pagamento: `D`/`P`/`B`/`C` | Dinheiro / Pix / Débito / Crédito |
+
+> Telas sensíveis pedem **senha de administrador** (padrão `0000`).
 
 ---
 
 ## 🛡️ Resiliência (à prova de queda de energia)
 
 - **SQLite com WAL** — uma queda de energia no meio de uma venda **não corrompe** o histórico.
+- **Dado seguro primeiro** — a venda é gravada **antes** de imprimir; impressão nunca derruba o caixa.
 - **Backup automático** em background (intervalo configurável) para uma pasta secundária (ex: OneDrive).
 - **Backup manual** em `.zip` e **restauração** em 2 cliques (troca de PC no meio da festa).
 - **Fallback de caminho** — se `%AppData%` não for gravável (pen drive), usa a pasta do `.exe`.
+- **Logs** em `%AppData%\FestaJuninaPDV\logs` para auditoria e diagnóstico.
 
 ---
 
@@ -67,6 +84,13 @@ installer/         -> PDVFesta.iss (instalador Inno Setup)
 
 **Princípios:** TDD (lógica testada antes da UI), preços em **centavos** (int, sem erro de
 arredondamento), Core desacoplado da UI.
+
+### 📚 Documentação técnica
+- **[Arquitetura](docs/ARQUITETURA.md)** — camadas, catálogo de classes, modelo de dados, fluxos.
+- **[Decisões de Arquitetura (ADRs)](docs/adr/README.md)** — o porquê de cada escolha.
+- **[Funcionalidades](docs/FUNCIONALIDADES.md)** — catálogo de features e critérios de aceite.
+- **[Manual do Operador](docs/MANUAL-OPERADOR.md)** — guia do dia da festa.
+- **[Diagnóstico e Logs](docs/DIAGNOSTICO.md)** · **[Changelog](docs/CHANGELOG.md)** · **[Build](docs/BUILD.md)**
 
 ---
 
