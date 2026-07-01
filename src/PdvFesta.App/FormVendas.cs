@@ -149,6 +149,7 @@ public sealed class FormVendas : Form
         var mArquivo = new ToolStripMenuItem("&Arquivo");
         mArquivo.DropDownItems.Add("Abrir Caixa...", null, (s, e) => AbrirCaixaMenu());
         mArquivo.DropDownItems.Add("Trocar Operador...", null, (s, e) => AbrirTrocaOperador());
+        mArquivo.DropDownItems.Add(Item("Painel em Tempo Real", Keys.F4, (s, e) => AbrirDashboard()));
         mArquivo.DropDownItems.Add(Item("Histórico de Vendas", Keys.F3, (s, e) => AbrirHistorico()));
         mArquivo.DropDownItems.Add(Item("Fechamento de Caixa", Keys.F9, (s, e) => AbrirFechamento()));
         mArquivo.DropDownItems.Add(new ToolStripSeparator());
@@ -160,7 +161,8 @@ public sealed class FormVendas : Form
         mConfig.DropDownItems.Add("Gerenciar Promoções / Combos...", null, (s, e) => AbrirGerenciarPromocoes());
         mConfig.DropDownItems.Add(Item("Gerenciar Impressora", Keys.F12, (s, e) => AbrirConfigImpressora()));
         mConfig.DropDownItems.Add("Layout do Cupom...", null, (s, e) => AbrirLayoutCupom());
-        mConfig.DropDownItems.Add("Customizar Atalhos...", null, (s, e) => AbrirCustomizarAtalhos());
+        mConfig.DropDownItems.Add(new ToolStripSeparator());
+        mConfig.DropDownItems.Add("Permissões e Senha...", null, (s, e) => AbrirPermissoes());
 
         var mFerr = new ToolStripMenuItem("Ferramen&tas");
         mFerr.DropDownItems.Add(Item("Backup / Restauração", Keys.F8, (s, e) => AbrirBackup()));
@@ -666,7 +668,7 @@ public sealed class FormVendas : Form
                 "Abrir Caixa", MessageBoxButtons.OK, MessageBoxIcon.Information);
             return;
         }
-        if (!Dialogos.LiberarAdmin(this, _servico)) return;
+        if (!Dialogos.LiberarAcao(this, _servico, AcaoProtegida.AbrirCaixa)) return;
         Dialogos.Modal(this, () => new FormAberturaCaixa(_servico));
         AtualizarStatus();
     }
@@ -701,6 +703,18 @@ public sealed class FormVendas : Form
         AtualizarStatus();
     }
 
+    // Painel em tempo real: SO visualizacao (nao mexe em nada) -> sem senha de admin.
+    private void AbrirDashboard()
+    {
+        if (!_servico.CaixaAberto)
+        {
+            MessageBox.Show("Abra o caixa para acompanhar as vendas em tempo real.",
+                "Painel", MessageBoxButtons.OK, MessageBoxIcon.Information);
+            return;
+        }
+        Dialogos.Modal(this, () => new FormDashboard(_servico));
+    }
+
     private void AbrirTrocaOperador()
     {
         if (!_servico.CaixaAberto)
@@ -709,60 +723,64 @@ public sealed class FormVendas : Form
                 "Troca de Operador", MessageBoxButtons.OK, MessageBoxIcon.Information);
             return;
         }
-        // critico (fecha turno + mexe em dinheiro/gaveta): pede senha de admin.
-        if (!Dialogos.LiberarAdmin(this, _servico)) return;
+        // as permissoes decidem se pede senha (padrao: pede — envolve dinheiro/turno).
+        if (!Dialogos.LiberarAcao(this, _servico, AcaoProtegida.TrocarOperador)) return;
         Dialogos.Modal(this, () => new FormTrocaOperador(_servico));
         AtualizarStatus();
     }
 
     private void AbrirFechamento()
     {
-        if (!Dialogos.LiberarAdmin(this, _servico)) return;
+        if (!Dialogos.LiberarAcao(this, _servico, AcaoProtegida.FecharCaixa)) return;
         Dialogos.Modal(this, () => new FormFechamento(_servico));
         AtualizarStatus();
     }
 
     private void AbrirGerenciarProdutos()
     {
-        if (!Dialogos.LiberarAdmin(this, _servico)) return;
+        if (!Dialogos.LiberarAcao(this, _servico, AcaoProtegida.GerenciarProdutos)) return;
         Dialogos.Modal(this, () => new FormGerenciarProdutos(_servico));
         RecarregarProdutos();   // refresh dinamico: botoes/precos atualizados na hora
     }
 
-    // Configuracoes NAO-perigosas (nao mexem em dinheiro/vendas): liberadas sem senha.
     private void AbrirGerenciarCategorias()
     {
+        if (!Dialogos.LiberarAcao(this, _servico, AcaoProtegida.GerenciarCategorias)) return;
         Dialogos.Modal(this, () => new FormCategorias(_servico));
         RecarregarProdutos();   // abas reordenadas/ocultadas na hora
     }
 
     private void AbrirGerenciarPromocoes()
     {
+        if (!Dialogos.LiberarAcao(this, _servico, AcaoProtegida.GerenciarPromocoes)) return;
         Dialogos.Modal(this, () => new FormPromocoes(_servico));
         _servico.RecarregarPromocoes();   // novas regras valem no proximo item
     }
 
     private void AbrirConfigImpressora()
     {
+        if (!Dialogos.LiberarAcao(this, _servico, AcaoProtegida.ConfigImpressora)) return;
         Dialogos.Modal(this, () => new FormPrinterConfig(_servico));
         AtualizarStatus();
     }
 
     private void AbrirLayoutCupom()
     {
+        if (!Dialogos.LiberarAcao(this, _servico, AcaoProtegida.LayoutCupom)) return;
         Dialogos.Modal(this, () => new FormLayoutCupom(_servico));
-    }
-
-    private void AbrirCustomizarAtalhos()
-    {
-        Dialogos.Modal(this, () => new FormCustomizarAtalhos(_servico));
-        RecarregarProdutos();   // badges de atalho atualizadas
     }
 
     private void AbrirBackup()
     {
-        if (!Dialogos.LiberarAdmin(this, _servico)) return;
+        if (!Dialogos.LiberarAcao(this, _servico, AcaoProtegida.Backup)) return;
         Dialogos.Modal(this, () => new FormBackup(_servico));
+    }
+
+    private void AbrirPermissoes()
+    {
+        // a tela de permissoes SEMPRE exige senha (nao pode ser desligada).
+        if (!Dialogos.LiberarAcao(this, _servico, AcaoProtegida.Permissoes)) return;
+        Dialogos.Modal(this, () => new FormPermissoes(_servico));
     }
 
     private void AbrirMovimento(TipoMovimento tipo)
@@ -773,7 +791,7 @@ public sealed class FormVendas : Form
                 "Caixa fechado", MessageBoxButtons.OK, MessageBoxIcon.Information);
             return;
         }
-        if (!Dialogos.LiberarAdmin(this, _servico)) return;
+        if (!Dialogos.LiberarAcao(this, _servico, AcaoProtegida.SangriaSuprimento)) return;
         Dialogos.Modal(this, () => new FormMovimento(_servico, tipo));
     }
 

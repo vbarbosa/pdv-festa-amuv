@@ -69,6 +69,15 @@ public sealed class FormLayoutCupom : Form
         };
         btnSalvar.Click += (s, e) => Salvar();
 
+        var btnTeste = new Button
+        {
+            Name = "btnImprimirTeste",
+            Text = "Imprimir teste de layout", Height = 44, Margin = new Padding(3, 3, 3, 3),
+            BackColor = Color.FromArgb(0, 120, 200), ForeColor = Color.White,
+            FlatStyle = FlatStyle.Flat, Font = new Font("Segoe UI", 11F, FontStyle.Bold)
+        };
+        btnTeste.Click += (s, e) => ImprimirTeste();
+
         var fluxo = new FlowLayoutPanel
         {
             Dock = DockStyle.Left, Width = 380, FlowDirection = FlowDirection.TopDown,
@@ -80,7 +89,7 @@ public sealed class FormLayoutCupom : Form
             Titulo("CABECALHO"), Rotulo("Nome do evento:"), _txtEvento,
             Rotulo("Subtitulo (ex: Caixa 01):"), _txtSubtitulo,
             Titulo("MODO DE IMPRESSÃO"), _rbCompleto, _rbFicha, _rbVales, _chkSeparar,
-            Titulo("RODAPE"), _txtRodape, btnSalvar
+            Titulo("RODAPE"), _txtRodape, btnSalvar, btnTeste
         };
         foreach (var c in ordenados) { c.Width = 344; fluxo.Controls.Add(c); }
 
@@ -152,6 +161,26 @@ public sealed class FormLayoutCupom : Form
         MessageBox.Show("Layout do cupom salvo!", "Layout", MessageBoxButtons.OK, MessageBoxIcon.Information);
     }
 
+    /// <summary>Imprime uma amostra do cupom com o layout ATUAL (o que esta na tela) na impressora.</summary>
+    private void ImprimirTeste()
+    {
+        if (!_servico.TemImpressora)
+        {
+            MessageBox.Show("Nenhuma impressora configurada.\nConfigure a impressora (F12) e tente de novo.",
+                "Teste de layout", MessageBoxButtons.OK, MessageBoxIcon.Information);
+            return;
+        }
+        // usa o layout que esta na tela agora (mesmo antes de salvar), com a venda de exemplo.
+        var (ok, msg) = PdvFesta.Core.EscPosPrinter.ImprimirTicket(
+            _servico.ImpressoraPadrao, VendaExemplo(), ConfigAtual());
+        if (ok)
+            MessageBox.Show("Teste enviado para a impressora. Confira o papel.",
+                "Teste de layout", MessageBoxButtons.OK, MessageBoxIcon.Information);
+        else
+            MessageBox.Show($"Nao foi possivel imprimir.\nDetalhe: {msg}",
+                "Teste de layout", MessageBoxButtons.OK, MessageBoxIcon.Warning);
+    }
+
     /// <summary>Venda de exemplo para o preview (nao vai ao banco).</summary>
     private static Venda VendaExemplo() => new()
     {
@@ -162,8 +191,10 @@ public sealed class FormLayoutCupom : Form
         TrocoCentavos = 300,
         Itens =
         {
-            new ItemVenda { Nome = "Quentao", PrecoUnitarioCentavos = 700, Quantidade = 1 },
-            new ItemVenda { Nome = "Bolo de Milho", PrecoUnitarioCentavos = 500, Quantidade = 2 },
+            // ProdutoId preenchido: no modo Vales, itens SEM ProdutoId sao tratados como
+            // linha de desconto de combo e nao viram vale (por isso o exemplo precisa dele).
+            new ItemVenda { ProdutoId = "quentao", Nome = "Quentao", PrecoUnitarioCentavos = 700, Quantidade = 1 },
+            new ItemVenda { ProdutoId = "bolomilho", Nome = "Bolo de Milho", PrecoUnitarioCentavos = 500, Quantidade = 2 },
         }
     };
 

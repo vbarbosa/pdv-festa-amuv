@@ -57,9 +57,10 @@ public sealed class VendaE2ETests : E2ETestBase
         System.Threading.Thread.Sleep(600);
     }
 
-    [Fact(Skip = SkipUI)]
+    [Fact]
     public void FluxoCompleto_AbreCaixa_DoisProdutos_ValidaGrid_Paga_GravaNoBanco()
     {
+        if (!EmSandbox) return;   // so roda na VM sandbox (nao trava a maquina em uso)
         using var automation = new UIA3Automation();
         var janela = SubirApp(automation);
 
@@ -111,12 +112,14 @@ public sealed class VendaE2ETests : E2ETestBase
         Assert.NotNull(venda.CaixaId);                                        // vinculada ao turno
     }
 
-    [Fact(Skip = SkipUI)]
+    [Fact]
     public void NavegacaoPorTeclado_CategoriaItemEnter_AdicionaEGrava()
     {
+        if (!EmSandbox) return;   // so roda na VM sandbox (nao trava a maquina em uso)
         using var automation = new UIA3Automation();
         var janela = SubirApp(automation);
         AbrirCaixa(automation);
+        Evidencia("abertura-caixa");
 
         janela.Focus();
         System.Threading.Thread.Sleep(800);
@@ -135,6 +138,7 @@ public sealed class VendaE2ETests : E2ETestBase
         System.Threading.Thread.Sleep(700);
         Keyboard.Press(VirtualKeyShort.ENTER);
         System.Threading.Thread.Sleep(800);
+        Evidencia("itens-no-carrinho");
 
         // carrinho deve ter 2 linhas (1 Bebida + 1 Bingo)
         var grid = RetentarAchar(janela, "gridCarrinho");
@@ -148,8 +152,10 @@ public sealed class VendaE2ETests : E2ETestBase
         Assert.NotNull(txt);
         txt!.AsTextBox().Enter("50,00");
         System.Threading.Thread.Sleep(300);
+        Evidencia("pagamento-troco");
         Keyboard.Type(VirtualKeyShort.ENTER);
         System.Threading.Thread.Sleep(900);
+        Evidencia("venda-concluida");
 
         try { if (!Proc!.HasExited) Proc.Kill(true); } catch { }
         System.Threading.Thread.Sleep(500);

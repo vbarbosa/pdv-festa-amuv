@@ -30,9 +30,10 @@ public sealed class CrudProdutoE2ETests : E2ETestBase
             if (File.Exists(_dbPath + ext)) { try { File.Delete(_dbPath + ext); } catch { } }
     }
 
-    [Fact(Skip = SkipUI)]
+    [Fact]
     public void CadastrarProduto_ApareceNaTelaENoBanco()
     {
+        if (!EmSandbox) return;   // so roda na VM sandbox (nao trava a maquina em uso)
         Assert.True(File.Exists(ExePath), $"Compile a App primeiro. Nao achei: {ExePath}");
         var psi = new ProcessStartInfo(ExePath) { UseShellExecute = false };
         psi.EnvironmentVariables["PDVFESTA_DB"] = _dbPath;

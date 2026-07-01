@@ -72,8 +72,12 @@ public sealed class FormCategorias : Form
         var btnInativar = Botao("Inativar (ocultar aba)", Color.FromArgb(180, 80, 0), (s, e) => Inativar());
         painel.Controls.Add(btnInativar, 0, 5); painel.SetColumnSpan(btnInativar, 2);
 
+        var btnExcluir = Botao("Excluir permanentemente", Color.FromArgb(160, 0, 0), (s, e) => Excluir());
+        btnExcluir.Name = "btnExcluirCategoria";
+        painel.Controls.Add(btnExcluir, 0, 6); painel.SetColumnSpan(btnExcluir, 2);
+
         _lblStatus.Dock = DockStyle.Fill; _lblStatus.Height = 54; _lblStatus.ForeColor = Color.FromArgb(60, 60, 60);
-        painel.Controls.Add(_lblStatus, 0, 6); painel.SetColumnSpan(_lblStatus, 2);
+        painel.Controls.Add(_lblStatus, 0, 7); painel.SetColumnSpan(_lblStatus, 2);
 
         _grid.Name = "gridCategorias";
         _grid.Dock = DockStyle.Fill;
@@ -172,5 +176,36 @@ public sealed class FormCategorias : Form
         NovaCategoria();
         _lblStatus.ForeColor = Color.FromArgb(180, 80, 0);
         _lblStatus.Text = "Categoria inativada.";
+    }
+
+    private void Excluir()
+    {
+        if (_editandoNome is null)
+        {
+            _lblStatus.ForeColor = Color.FromArgb(180, 0, 0);
+            _lblStatus.Text = "Selecione uma categoria para excluir.";
+            return;
+        }
+        // TRAVA: categoria com produtos nao pode ser apagada (evita produtos orfaos).
+        int qtd = _servico.ContarProdutosDaCategoria(_editandoNome);
+        if (qtd > 0)
+        {
+            MessageBox.Show(
+                $"A categoria \"{_editandoNome}\" tem {qtd} produto(s) e NAO pode ser excluida.\n\n" +
+                "Mova/exclua os produtos primeiro, ou use 'Inativar' para ocultar a aba.",
+                "Excluir categoria", MessageBoxButtons.OK, MessageBoxIcon.Warning);
+            return;
+        }
+        var r = MessageBox.Show(
+            $"EXCLUIR permanentemente a categoria \"{_editandoNome}\"?\n\nEssa acao NAO pode ser desfeita.",
+            "Excluir categoria", MessageBoxButtons.YesNo, MessageBoxIcon.Warning,
+            MessageBoxDefaultButton.Button2);
+        if (r != DialogResult.Yes) return;
+
+        _servico.ExcluirCategoria(_editandoNome);
+        CarregarGrid();
+        NovaCategoria();
+        _lblStatus.ForeColor = Color.FromArgb(160, 0, 0);
+        _lblStatus.Text = "Categoria excluida permanentemente.";
     }
 }

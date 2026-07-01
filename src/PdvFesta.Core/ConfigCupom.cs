@@ -69,11 +69,13 @@ public sealed class ConfigCupom
         {
             Evento = repo.LerConfig(KEvento, tituloPadrao),
             Subtitulo = repo.LerConfig(KSubtitulo, ""),
-            Modo = repo.LerConfig(KModo, "0") switch
+            // PADRAO = ReciboComVales ("2"): na festa o cupom ja sai com os vales destacaveis.
+            // Quem quiser recibo simples ou ficha troca em Configuracoes > Layout do Cupom.
+            Modo = repo.LerConfig(KModo, "2") switch
             {
+                "0" => ModoCupom.Completo,
                 "1" => ModoCupom.FichaConsumo,
-                "2" => ModoCupom.ReciboComVales,
-                _ => ModoCupom.Completo
+                _ => ModoCupom.ReciboComVales
             },
             SepararPorItem = repo.LerConfig(KSeparar, "0") == "1",
             Rodape = repo.LerConfig(KRodape, "Obrigado! Bom Arraia!")
