@@ -68,20 +68,26 @@ if ($Finalizar) {
     Enable-VMIntegrationService -VMName $VMName -Name "Guest Service Interface" -ErrorAction SilentlyContinue
     Ok "Guest Service Interface habilitado."
 
-    if ((Get-VM -Name $VMName).State -ne 'Running') { Start-VM -Name $VMName; Start-Sleep -Seconds 40 }
+    if ((Get-VM -Name $VMName).State -ne 'Running') { Start-VM -Name $VMName }
 
     $cred = New-Object System.Management.Automation.PSCredential(
         $GuestUser, (ConvertTo-SecureString $GuestPass -AsPlainText -Force))
 
-    try {
-        Invoke-Command -VMName $VMName -Credential $cred -ScriptBlock {
-            New-Item -ItemType Directory -Force "C:\TempPDV" | Out-Null
-            Set-ExecutionPolicy -Scope LocalMachine Bypass -Force -ErrorAction SilentlyContinue
-        } -ErrorAction Stop
-        Ok "PowerShell Direct funcionando (guest respondeu)."
-    } catch {
-        throw "Nao consegui falar com o guest via PowerShell Direct. Confira o usuario/senha e se o Windows da VM esta logado. Detalhe: $($_.Exception.Message)"
+    # Espera ATE 3 minutos o guest responder (da tempo de voce LOGAR como 'pdv' na VM).
+    # O PowerShell Direct so funciona com o usuario logado na sessao interativa.
+    Info "Aguardando a VM responder (LOGUE como '$GuestUser' na janela da VM se pedir)..."
+    $ok = $false
+    for ($i = 0; $i -lt 36; $i++) {
+        try { Invoke-Command -VMName $VMName -Credential $cred -ScriptBlock { $true } -ErrorAction Stop | Out-Null; $ok = $true; break }
+        catch { Start-Sleep 5 }
     }
+    if (-not $ok) { throw "A VM nao respondeu em 3 min. Confira: usuario '$GuestUser'/senha '$GuestPass' e se a VM esta LOGADA na area de trabalho." }
+
+    Invoke-Command -VMName $VMName -Credential $cred -ScriptBlock {
+        New-Item -ItemType Directory -Force "C:\TempPDV" | Out-Null
+        Set-ExecutionPolicy -Scope LocalMachine Bypass -Force -ErrorAction SilentlyContinue
+    }
+    Ok "Guest pronto (PowerShell Direct OK)."
 
     # Instala o .NET 8 SDK DENTRO da VM (para rodar 'dotnet test' com a bateria FlaUI completa).
     # A VM tem rede; usamos o instalador oficial do dotnet (dotnet-install). Idempotente.
