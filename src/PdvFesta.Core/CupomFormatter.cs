@@ -163,11 +163,26 @@ public static class CupomFormatter
         l.Add(new LinhaCupom(Divisoria(largura)));
 
         foreach (var item in venda.Itens)
-            // SEMPRE com a quantidade como prefixo (ex: "2x Pipoca .......... R$ 10,00").
-            // Uma linha por item: fica alinhado (32 col) e economiza bobina.
+        {
+            // linha de DESCONTO de combo/promocao: ProdutoId vazio e subtotal negativo.
+            if (string.IsNullOrEmpty(item.ProdutoId) && item.SubtotalCentavos < 0)
+            {
+                l.Add(new LinhaCupom(LinhaItem("* " + item.Nome, "-" + Moeda(-item.SubtotalCentavos), largura)));
+                continue;
+            }
+            // itens normais: SEMPRE com a quantidade como prefixo ("2x Pipoca .... R$ 10,00").
             l.Add(new LinhaCupom(LinhaItem($"{item.Quantidade}x {item.Nome}", Moeda(item.SubtotalCentavos), largura)));
+        }
 
         l.Add(new LinhaCupom(Divisoria(largura)));
+        // Se houve desconto de combo, deixa claro: Subtotal, Descontos e o TOTAL ja com desconto.
+        int subtotalCent = venda.Itens.Where(i => i.SubtotalCentavos > 0).Sum(i => i.SubtotalCentavos);
+        int descontoCent = venda.Itens.Where(i => i.SubtotalCentavos < 0).Sum(i => -i.SubtotalCentavos);
+        if (descontoCent > 0)
+        {
+            l.Add(new LinhaCupom(LinhaItem("Subtotal", Moeda(subtotalCent), largura)));
+            l.Add(new LinhaCupom(LinhaItem("Descontos (combo)", "-" + Moeda(descontoCent), largura)));
+        }
         l.Add(new LinhaCupom(LinhaItem("TOTAL", Moeda(venda.TotalCentavos), largura)));
         l.Add(new LinhaCupom(LinhaItem("Pagamento", NomeForma(venda.Forma), largura)));
 

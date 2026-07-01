@@ -127,6 +127,7 @@ public sealed class FormVendas : Form
         var mConfig = new ToolStripMenuItem("&Configuracoes");
         mConfig.DropDownItems.Add("Gerenciar Produtos...", null, (s, e) => AbrirGerenciarProdutos());
         mConfig.DropDownItems.Add("Gerenciar Categorias...", null, (s, e) => AbrirGerenciarCategorias());
+        mConfig.DropDownItems.Add("Gerenciar Promocoes / Combos...", null, (s, e) => AbrirGerenciarPromocoes());
         mConfig.DropDownItems.Add(Item("Gerenciar Impressora", Keys.F12, (s, e) => AbrirConfigImpressora()));
         mConfig.DropDownItems.Add("Layout do Cupom...", null, (s, e) => AbrirLayoutCupom());
         mConfig.DropDownItems.Add("Customizar Atalhos...", null, (s, e) => AbrirCustomizarAtalhos());
@@ -396,6 +397,7 @@ public sealed class FormVendas : Form
     private void AdicionarProduto(Produto p)
     {
         _servico.Carrinho.Adicionar(p);
+        _servico.AplicarPromocoes();       // auto-detecta combos/promocoes
         AtualizarCarrinho();
     }
 
@@ -410,6 +412,14 @@ public sealed class FormVendas : Form
                 CupomFormatter.Moeda(i.SubtotalCentavos));
             _grid.Rows[idx].Tag = i.ProdutoId;
         }
+        // linhas de DESCONTO de combo/promocao (verde, italico) - nao substitui os itens
+        foreach (var d in _servico.Carrinho.Descontos)
+        {
+            int idx = _grid.Rows.Add("", "* " + d.Descricao, "", "-" + CupomFormatter.Moeda(d.ValorCentavos));
+            _grid.Rows[idx].DefaultCellStyle.ForeColor = Color.FromArgb(0, 130, 0);
+            _grid.Rows[idx].DefaultCellStyle.Font = new Font(_grid.Font, FontStyle.Bold | FontStyle.Italic);
+            _grid.Rows[idx].Tag = null;   // linha de desconto nao e removivel individualmente
+        }
         _lblTotal.Text = CupomFormatter.Moeda(_servico.Carrinho.TotalCentavos);
     }
 
@@ -418,6 +428,7 @@ public sealed class FormVendas : Form
         if (_grid.CurrentRow?.Tag is string id)
         {
             _servico.Carrinho.Remover(id);
+            _servico.AplicarPromocoes();   // reavalia: pode sumir a linha de desconto
             AtualizarCarrinho();
         }
     }
@@ -525,6 +536,13 @@ public sealed class FormVendas : Form
         if (!Dialogos.LiberarAdmin(this, _servico)) return;
         Dialogos.Modal(this, () => new FormCategorias(_servico));
         RecarregarProdutos();   // abas reordenadas/ocultadas na hora
+    }
+
+    private void AbrirGerenciarPromocoes()
+    {
+        if (!Dialogos.LiberarAdmin(this, _servico)) return;
+        Dialogos.Modal(this, () => new FormPromocoes(_servico));
+        _servico.RecarregarPromocoes();   // novas regras valem no proximo item
     }
 
     private void AbrirConfigImpressora()

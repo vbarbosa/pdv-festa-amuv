@@ -57,6 +57,15 @@ Guia rápido para quem vai operar o caixa no dia da festa. Não precisa saber de
   > ⚠️ O dinheiro/estorno no cartão é devolvido **na mão**; o sistema só registra o
   > cancelamento. A venda cancelada some dos totais (a gaveta continua batendo).
 
+## 4.2 Combos e promoções (automático)
+
+Não precisa apertar botão de combo! Se o cliente levar **1 Refri + 1 Bolo** (ou Pinhão, ou
+2 Refri), o sistema **reconhece sozinho** e mostra uma **linha verde de desconto** no carrinho,
+deixando o combo a **R$ 10** — válido **até as 20h** (depois volta ao preço cheio). O desconto
+também aparece no cupom. Se remover um item do combo, o desconto some automaticamente.
+
+Para criar/editar combos e horários: **Configurações → Gerenciar Promoções/Combos** (senha admin).
+
 ## 5. Durante a festa (tesoureiro)
 
 Telas protegidas por **senha de administrador** (padrão: **0000**).

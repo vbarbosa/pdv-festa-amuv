@@ -32,6 +32,16 @@ Lista das funcionalidades do produto, com critérios de aceite e onde vivem no c
   do **Total em Gaveta** e da **Leitura Z** → conciliação exata.
 - **Código:** `FormHistoricoVendas`, `Repositorio.CancelarVenda`, `Caixa.Consolidar/ContarItens`.
 
+## 2.2 Motor de promoções/combos (auto-detecção)
+- Ao adicionar/remover itens, o carrinho **auto-detecta** combos/promoções ativas
+  (`PricingEngine`) e aplica o desconto por **conjunto completo**, dentro da janela de horário.
+- Mostra uma **linha verde** `* DESCONTO: <combo>` (não substitui os itens); some ao remover item.
+- **Gestão** (`FormPromocoes`): preço especial ou combo, horários (DateTimePicker), liga/desliga,
+  itens exigidos, soft delete.
+- **Seed do cartaz**: combos "até 20h" (Refri+Bolo, Refri+Pinhão, 2 Refri = R$ 10).
+- **Eco-print**: cupom só imprime Recebido/Troco no Dinheiro (economia de bobina no Pix/cartão).
+- **Código:** `Promocao`, `PricingEngine`, `Carrinho`, `FormPromocoes`, `CupomFormatter`.
+
 ## 3. Turno de caixa
 - **Abertura** com fundo de caixa (troco inicial). Sem caixa aberto, não vende.
 - **Sangria** (retirada) e **Suprimento** (entrada) de dinheiro.

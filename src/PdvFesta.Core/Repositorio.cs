@@ -100,7 +100,24 @@ CREATE TABLE IF NOT EXISTS categorias (
     nome   TEXT PRIMARY KEY,
     ordem  INTEGER NOT NULL DEFAULT 0,
     ativo  INTEGER NOT NULL DEFAULT 1
-);";
+);
+
+CREATE TABLE IF NOT EXISTS promocoes (
+    id              INTEGER PRIMARY KEY AUTOINCREMENT,
+    descricao       TEXT NOT NULL,
+    tipo            INTEGER NOT NULL,
+    valor_desc_cent INTEGER NOT NULL DEFAULT 0,
+    hora_inicio     TEXT NULL,
+    hora_fim        TEXT NULL,
+    ativo           INTEGER NOT NULL DEFAULT 1
+);
+
+CREATE TABLE IF NOT EXISTS promocao_itens (
+    promocao_id INTEGER NOT NULL,
+    produto_id  TEXT NOT NULL,
+    quantidade  INTEGER NOT NULL DEFAULT 1
+);
+CREATE INDEX IF NOT EXISTS ix_promoitens ON promocao_itens(promocao_id);";
         cmd.ExecuteNonQuery();
 
         MigrarColunasVendas(conn);
@@ -506,6 +523,114 @@ ON CONFLICT(nome) DO UPDATE SET ordem = excluded.ordem, ativo = excluded.ativo;"
             cmd.ExecuteNonQuery();
         }
         tx.Commit();
+    }
+
+    // ---------- PROMOCOES / COMBOS ----------
+
+    /// <summary>Lista promocoes (com seus itens exigidos). Ativas por padrao.</summary>
+    public List<Promocao> ListarPromocoes(bool incluirInativas = false)
+    {
+        using var conn = Abrir();
+        var promos = new Dictionary<long, Promocao>();
+        using (var cmd = conn.CreateCommand())
+        {
+            cmd.CommandText = incluirInativas
+                ? "SELECT id, descricao, tipo, valor_desc_cent, hora_inicio, hora_fim, ativo FROM promocoes ORDER BY id;"
+                : "SELECT id, descricao, tipo, valor_desc_cent, hora_inicio, hora_fim, ativo FROM promocoes WHERE ativo=1 ORDER BY id;";
+            using var r = cmd.ExecuteReader();
+            while (r.Read())
+            {
+                var p = new Promocao
+                {
+                    Id = r.GetInt64(0),
+                    Descricao = r.GetString(1),
+                    Tipo = (TipoPromocao)r.GetInt32(2),
+                    ValorDescontoCentavos = r.GetInt32(3),
+                    HoraInicio = r.IsDBNull(4) ? null : TimeSpan.Parse(r.GetString(4)),
+                    HoraFim = r.IsDBNull(5) ? null : TimeSpan.Parse(r.GetString(5)),
+                    Ativo = r.GetInt32(6) == 1
+                };
+                promos[p.Id] = p;
+            }
+        }
+        if (promos.Count > 0)
+        {
+            using var cmd2 = conn.CreateCommand();
+            cmd2.CommandText = "SELECT promocao_id, produto_id, quantidade FROM promocao_itens;";
+            using var r2 = cmd2.ExecuteReader();
+            while (r2.Read())
+                if (promos.TryGetValue(r2.GetInt64(0), out var p))
+                    p.Itens.Add(new PromocaoItem { ProdutoId = r2.GetString(1), Quantidade = r2.GetInt32(2) });
+        }
+        return promos.Values.ToList();
+    }
+
+    /// <summary>Insere/atualiza a promocao e substitui seus itens exigidos. Retorna o Id.</summary>
+    public long SalvarPromocao(Promocao p)
+    {
+        using var conn = Abrir();
+        using var tx = conn.BeginTransaction();
+        long id = p.Id;
+        using (var cmd = conn.CreateCommand())
+        {
+            cmd.Transaction = tx;
+            if (id <= 0)
+                cmd.CommandText = @"INSERT INTO promocoes (descricao,tipo,valor_desc_cent,hora_inicio,hora_fim,ativo)
+VALUES ($d,$t,$v,$hi,$hf,$a); SELECT last_insert_rowid();";
+            else
+            {
+                cmd.CommandText = "UPDATE promocoes SET descricao=$d,tipo=$t,valor_desc_cent=$v,hora_inicio=$hi,hora_fim=$hf,ativo=$a WHERE id=$id;";
+                cmd.Parameters.AddWithValue("$id", id);
+            }
+            cmd.Parameters.AddWithValue("$d", p.Descricao);
+            cmd.Parameters.AddWithValue("$t", (int)p.Tipo);
+            cmd.Parameters.AddWithValue("$v", p.ValorDescontoCentavos);
+            cmd.Parameters.AddWithValue("$hi", (object?)p.HoraInicio?.ToString("hh\\:mm") ?? DBNull.Value);
+            cmd.Parameters.AddWithValue("$hf", (object?)p.HoraFim?.ToString("hh\\:mm") ?? DBNull.Value);
+            cmd.Parameters.AddWithValue("$a", p.Ativo ? 1 : 0);
+            id = id <= 0 ? (long)(cmd.ExecuteScalar() ?? 0L) : (cmd.ExecuteNonQuery() >= 0 ? id : id);
+        }
+        using (var del = conn.CreateCommand())
+        {
+            del.Transaction = tx;
+            del.CommandText = "DELETE FROM promocao_itens WHERE promocao_id=$id;";
+            del.Parameters.AddWithValue("$id", id);
+            del.ExecuteNonQuery();
+        }
+        foreach (var it in p.Itens.Where(i => !string.IsNullOrWhiteSpace(i.ProdutoId)))
+        {
+            using var ins = conn.CreateCommand();
+            ins.Transaction = tx;
+            ins.CommandText = "INSERT INTO promocao_itens (promocao_id, produto_id, quantidade) VALUES ($id,$p,$q);";
+            ins.Parameters.AddWithValue("$id", id);
+            ins.Parameters.AddWithValue("$p", it.ProdutoId);
+            ins.Parameters.AddWithValue("$q", Math.Max(1, it.Quantidade));
+            ins.ExecuteNonQuery();
+        }
+        tx.Commit();
+        return id;
+    }
+
+    /// <summary>Soft delete de promocao (mantem historico).</summary>
+    public void InativarPromocao(long id)
+    {
+        using var conn = Abrir();
+        using var cmd = conn.CreateCommand();
+        cmd.CommandText = "UPDATE promocoes SET ativo=0 WHERE id=$id;";
+        cmd.Parameters.AddWithValue("$id", id);
+        cmd.ExecuteNonQuery();
+    }
+
+    /// <summary>Semeia promocoes SOMENTE se a tabela estiver vazia (idempotente).</summary>
+    public void SemearPromocoesSeVazio(IEnumerable<Promocao> promocoes)
+    {
+        using (var conn = Abrir())
+        using (var check = conn.CreateCommand())
+        {
+            check.CommandText = "SELECT COUNT(*) FROM promocoes;";
+            if (Convert.ToInt64(check.ExecuteScalar() ?? 0L) > 0) return;
+        }
+        foreach (var p in promocoes) { p.Id = 0; SalvarPromocao(p); }
     }
 
     // ---------- TURNOS DE CAIXA ----------

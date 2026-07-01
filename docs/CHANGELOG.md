@@ -3,6 +3,22 @@
 Formato baseado em [Keep a Changelog](https://keepachangelog.com/pt-BR/).
 Versionamento [SemVer](https://semver.org/lang/pt-BR/).
 
+## [2.2.0] — Motor de promoções/combos automáticos
+
+### Adicionado
+- **Motor de Preços (`PricingEngine`)**: ao adicionar/remover itens, o carrinho **auto-detecta**
+  combos/promoções ativas e aplica o desconto por **conjunto completo**.
+- **UX rastreável**: em vez de substituir os itens, adiciona uma **linha verde**
+  `* DESCONTO: <combo>` com o valor negativo. Remover um item do combo reavalia e some com a linha.
+- **Cupom**: mostra a linha de desconto do combo + resumo **Subtotal / Descontos / TOTAL**.
+- **Gestão de Promoções (`FormPromocoes`)**: preço especial ou combo, **janela de horário**
+  (DateTimePicker), liga/desliga instantâneo, itens exigidos, **soft delete**.
+- **Seed do cartaz**: os combos **"até 20h"** já vêm cadastrados (1 Refri+1 Bolo, 1 Refri+1
+  Pinhão, 2 Refri = R$ 10, ou seja R$ 2 de desconto), como promoções auto-detectáveis.
+
+### Confirmado
+- **Eco-print** (Recebido/Troco só no Dinheiro) já estava ativo desde a 2.0.
+
 ## [2.1.0] — Correção de carrinho e estorno de vendas
 
 ### Adicionado

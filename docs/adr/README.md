@@ -19,3 +19,4 @@ de Michael Nygard.
 | [0011](0011-blindagem-e-logs.md) | Blindagem global de exceções + logs em arquivo | Aceito |
 | [0012](0012-formas-pagamento-estaveis.md) | Valores do enum de pagamento estáveis e aditivos | Aceito |
 | [0013](0013-estorno-audit-trail.md) | Estorno de venda por soft delete (audit trail) | Aceito |
+| [0014](0014-motor-de-precos.md) | Motor de preços (combos/promoções auto-detectados) | Aceito |

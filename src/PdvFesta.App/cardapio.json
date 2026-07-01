@@ -1,6 +1,17 @@
 {
   "tituloCupom": "ARRAIA DA AMUV",
   "categorias": ["Comidas", "Doces", "Bebidas", "Jogos", "Bingo", "Promocoes"],
+  "promocoes": [
+    { "descricao": "COMBO Refri + Bolo (ate 20h)", "tipo": "Combo", "descontoCentavos": 200,
+      "horaInicio": "00:00", "horaFim": "20:00",
+      "itens": [ { "produtoId": "refri", "quantidade": 1 }, { "produtoId": "bolochoc", "quantidade": 1 } ] },
+    { "descricao": "COMBO Refri + Pinhao (ate 20h)", "tipo": "Combo", "descontoCentavos": 200,
+      "horaInicio": "00:00", "horaFim": "20:00",
+      "itens": [ { "produtoId": "refri", "quantidade": 1 }, { "produtoId": "pinhao", "quantidade": 1 } ] },
+    { "descricao": "COMBO 2 Refri (ate 20h)", "tipo": "Combo", "descontoCentavos": 200,
+      "horaInicio": "00:00", "horaFim": "20:00",
+      "itens": [ { "produtoId": "refri", "quantidade": 2 } ] }
+  ],
   "produtos": [
     { "id": "quentao",   "nome": "Quentao",          "precoCentavos": 700,  "categoria": "Bebidas", "atalho": 1 },
     { "id": "refri",     "nome": "Refrigerante",     "precoCentavos": 600,  "categoria": "Bebidas", "atalho": 2 },

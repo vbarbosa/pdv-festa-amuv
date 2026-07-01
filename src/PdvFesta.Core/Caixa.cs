@@ -122,6 +122,8 @@ public static class Caixa
         return vendas
             .Where(v => !v.Cancelada)          // itens de vendas canceladas nao contam
             .SelectMany(v => v.Itens)
+            // ignora as linhas de DESCONTO (marcador: ProdutoId vazio + subtotal negativo)
+            .Where(i => !(string.IsNullOrEmpty(i.ProdutoId) && i.SubtotalCentavos < 0))
             .GroupBy(i => i.Nome)
             .Select(g => new ItemVendido
             {

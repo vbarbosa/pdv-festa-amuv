@@ -61,6 +61,17 @@ public sealed class Servico : IDisposable
     /// <summary>Catalogo completo (inclui inativos) para a tela de gestao.</summary>
     public List<Produto> ProdutosTodos() => Repo.ListarProdutos();
 
+    // ----- promocoes / combos -----
+    private List<Promocao>? _promosCache;
+    public List<Promocao> Promocoes() => Repo.ListarPromocoes(incluirInativas: true);
+    public List<Promocao> PromocoesAtivas() => _promosCache ??= Repo.ListarPromocoes(incluirInativas: false);
+    public long SalvarPromocao(Promocao p) { var id = Repo.SalvarPromocao(p); RecarregarPromocoes(); return id; }
+    public void InativarPromocao(long id) { Repo.InativarPromocao(id); RecarregarPromocoes(); }
+    public void RecarregarPromocoes() => _promosCache = Repo.ListarPromocoes(incluirInativas: false);
+
+    /// <summary>Reavalia os combos/promocoes sobre o carrinho atual (chamar a cada add/remove).</summary>
+    public void AplicarPromocoes() => Carrinho.AplicarDescontos(PromocoesAtivas(), DateTime.Now);
+
     // ----- categorias -----
     public List<Categoria> Categorias() => Repo.ListarCategorias(incluirInativas: true);
     public List<Categoria> CategoriasAtivas() => Repo.ListarCategorias(incluirInativas: false);

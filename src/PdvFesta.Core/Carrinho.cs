@@ -7,10 +7,25 @@ namespace PdvFesta.Core;
 public sealed class Carrinho
 {
     private readonly List<ItemVenda> _itens = new();
+    private readonly List<DescontoAplicado> _descontos = new();
 
     public IReadOnlyList<ItemVenda> Itens => _itens;
+    /// <summary>Descontos de combos/promocoes detectados automaticamente (linhas verdes).</summary>
+    public IReadOnlyList<DescontoAplicado> Descontos => _descontos;
 
-    public int TotalCentavos => _itens.Sum(i => i.SubtotalCentavos);
+    public int SubtotalCentavos => _itens.Sum(i => i.SubtotalCentavos);
+    public int DescontoTotalCentavos => _descontos.Sum(d => d.ValorCentavos);
+    public int TotalCentavos => SubtotalCentavos - DescontoTotalCentavos;
+
+    /// <summary>
+    /// Reavalia as promocoes ativas sobre o carrinho (chamar a cada add/remove).
+    /// O motor de precos e puro; aqui so guardamos o resultado.
+    /// </summary>
+    public void AplicarDescontos(IEnumerable<Promocao> promocoes, DateTime agora)
+    {
+        _descontos.Clear();
+        _descontos.AddRange(PricingEngine.Calcular(_itens, promocoes, agora));
+    }
 
     /// <summary>Adiciona um produto (ou combo). Se ja existir, soma a quantidade.</summary>
     public void Adicionar(Produto produto, int quantidade = 1)
@@ -48,7 +63,7 @@ public sealed class Carrinho
             _itens.Remove(item);
     }
 
-    public void Limpar() => _itens.Clear();
+    public void Limpar() { _itens.Clear(); _descontos.Clear(); }
 
     /// <summary>Converte o carrinho em uma Venda pronta para persistir.</summary>
     public Venda FecharVenda(FormaPagamento forma, int recebidoCentavos, string operador)
@@ -58,16 +73,27 @@ public sealed class Carrinho
             ? Caixa.CalcularTroco(total, recebidoCentavos)
             : 0;
 
+        // itens do carrinho + linhas de desconto (ProdutoId vazio, subtotal NEGATIVO).
+        // Assim o desconto persiste, imprime e entra no total, mantendo a rastreabilidade.
+        var itensVenda = _itens.Select(i => new ItemVenda
+        {
+            ProdutoId = i.ProdutoId,
+            Nome = i.Nome,
+            PrecoUnitarioCentavos = i.PrecoUnitarioCentavos,
+            Quantidade = i.Quantidade
+        }).ToList();
+        itensVenda.AddRange(_descontos.Select(d => new ItemVenda
+        {
+            ProdutoId = "",                       // marcador de linha de desconto
+            Nome = d.Descricao,
+            PrecoUnitarioCentavos = -d.ValorCentavos,
+            Quantidade = 1
+        }));
+
         return new Venda
         {
             DataHora = DateTime.Now,
-            Itens = _itens.Select(i => new ItemVenda
-            {
-                ProdutoId = i.ProdutoId,
-                Nome = i.Nome,
-                PrecoUnitarioCentavos = i.PrecoUnitarioCentavos,
-                Quantidade = i.Quantidade
-            }).ToList(),
+            Itens = itensVenda,
             TotalCentavos = total,
             Forma = forma,
             RecebidoCentavos = forma == FormaPagamento.Dinheiro ? recebidoCentavos : 0,
