@@ -18,7 +18,6 @@ public sealed class FormGerenciarProdutos : Form
     private readonly TextBox _txtNome = new();
     private readonly TextBox _txtPreco = new();
     private readonly ComboBox _cmbCategoria = new();
-    private readonly NumericUpDown _numAtalho = new();
     private readonly CheckBox _chkAtivo = new();
     private readonly Label _lblStatus = new();
 
@@ -72,25 +71,28 @@ public sealed class FormGerenciarProdutos : Form
         _cmbCategoria.DropDownStyle = ComboBoxStyle.DropDown;
         AddCampo(painel, 3, "Categoria:", _cmbCategoria);
 
-        _numAtalho.Dock = DockStyle.Fill; _numAtalho.Minimum = 0; _numAtalho.Maximum = 9;
-        _numAtalho.Font = new Font("Segoe UI", 12F);
-        AddCampo(painel, 4, "Atalho (0-9):", _numAtalho);
+        // (O atalho do teclado NAO e mais cadastrado: e derivado da POSICAO do item na
+        //  categoria — ver navegacao Letra+Numero. Por isso nao ha campo de atalho aqui.)
 
         _chkAtivo.Text = "Produto ativo (aparece no caixa)"; _chkAtivo.Dock = DockStyle.Fill;
         _chkAtivo.Checked = true;
-        painel.Controls.Add(new Label { Text = "", Width = 1 }, 0, 5);
-        painel.Controls.Add(_chkAtivo, 1, 5);
+        painel.Controls.Add(new Label { Text = "", Width = 1 }, 0, 4);
+        painel.Controls.Add(_chkAtivo, 1, 4);
 
         var btnNovo = Botao("Novo", Color.FromArgb(70, 70, 90), (s, e) => NovoProduto());
         btnNovo.Name = "btnNovoProduto";
         var btnSalvar = Botao("Salvar / Atualizar", Color.FromArgb(0, 130, 0), (s, e) => Salvar());
         btnSalvar.Name = "btnSalvarProduto";
-        painel.Controls.Add(btnNovo, 0, 6);
-        painel.Controls.Add(btnSalvar, 1, 6);
+        painel.Controls.Add(btnNovo, 0, 5);
+        painel.Controls.Add(btnSalvar, 1, 5);
 
         var btnInativar = Botao("Inativar (ocultar do caixa)", Color.FromArgb(180, 80, 0), (s, e) => Inativar());
         btnInativar.Name = "btnInativarProduto";
-        painel.Controls.Add(btnInativar, 0, 7); painel.SetColumnSpan(btnInativar, 2);
+        painel.Controls.Add(btnInativar, 0, 6); painel.SetColumnSpan(btnInativar, 2);
+
+        var btnExcluir = Botao("Excluir permanentemente", Color.FromArgb(160, 0, 0), (s, e) => Excluir());
+        btnExcluir.Name = "btnExcluirProduto";
+        painel.Controls.Add(btnExcluir, 0, 7); painel.SetColumnSpan(btnExcluir, 2);
 
         _lblStatus.Dock = DockStyle.Fill; _lblStatus.Height = 60;
         _lblStatus.ForeColor = Color.FromArgb(60, 60, 60);
@@ -113,15 +115,69 @@ public sealed class FormGerenciarProdutos : Form
         _grid.Columns.Add("nome", "Nome");
         _grid.Columns.Add("preco", "Preço");
         _grid.Columns.Add("cat", "Categoria");
-        _grid.Columns.Add("atalho", "Atalho");
         _grid.Columns.Add("ativo", "Ativo");
         _grid.Columns["id"]!.Visible = false;
         _grid.Columns["preco"]!.DefaultCellStyle.Alignment = DataGridViewContentAlignment.MiddleRight;
-        _grid.Columns["atalho"]!.DefaultCellStyle.Alignment = DataGridViewContentAlignment.MiddleCenter;
         _grid.SelectionChanged += (s, e) => SelecionarLinha();
+
+        // ---- barra inferior: versionamento do cardapio (exportar/importar .json) ----
+        var barraCardapio = new FlowLayoutPanel
+        {
+            Dock = DockStyle.Bottom, Height = 52, Padding = new Padding(8), BackColor = Color.FromArgb(238, 238, 238)
+        };
+        var btnExportar = Botao("Exportar cardapio (.json)", Color.FromArgb(0, 120, 200), (s, e) => ExportarCardapio());
+        btnExportar.Name = "btnExportarCardapio"; btnExportar.Width = 210;
+        var btnImportar = Botao("Importar cardapio (.json)", Color.FromArgb(180, 100, 0), (s, e) => ImportarCardapio());
+        btnImportar.Name = "btnImportarCardapio"; btnImportar.Width = 210;
+        barraCardapio.Controls.Add(btnExportar);
+        barraCardapio.Controls.Add(btnImportar);
 
         Controls.Add(_grid);
         Controls.Add(painel);
+        Controls.Add(barraCardapio);
+    }
+
+    private void ExportarCardapio()
+    {
+        try
+        {
+            using var dlg = new FolderBrowserDialog { Description = "Onde salvar o cardapio exportado?" };
+            if (dlg.ShowDialog(this) != DialogResult.OK) return;
+            var caminho = _servico.ExportarCardapio(dlg.SelectedPath);
+            MessageBox.Show("Cardapio exportado:\n" + caminho, "Exportar cardapio",
+                MessageBoxButtons.OK, MessageBoxIcon.Information);
+        }
+        catch (Exception ex)
+        {
+            MessageBox.Show("Erro ao exportar: " + ex.Message, "Exportar cardapio",
+                MessageBoxButtons.OK, MessageBoxIcon.Error);
+        }
+    }
+
+    private void ImportarCardapio()
+    {
+        var confirma = MessageBox.Show(
+            "Importar vai SUBSTITUIR o cardapio atual (produtos e categorias) pelo do arquivo.\n" +
+            "As vendas e turnos NAO sao afetados.\n\nContinuar?",
+            "Importar cardapio", MessageBoxButtons.YesNo, MessageBoxIcon.Warning,
+            MessageBoxDefaultButton.Button2);
+        if (confirma != DialogResult.Yes) return;
+
+        using var dlg = new OpenFileDialog { Filter = "Cardapio (*.json)|*.json" };
+        if (dlg.ShowDialog(this) != DialogResult.OK) return;
+        try
+        {
+            int n = _servico.ImportarCardapio(dlg.FileName);
+            CarregarGrid();
+            NovoProduto();
+            MessageBox.Show($"Cardapio importado: {n} produto(s).", "Importar cardapio",
+                MessageBoxButtons.OK, MessageBoxIcon.Information);
+        }
+        catch (Exception ex)
+        {
+            MessageBox.Show("Erro ao importar (arquivo invalido?): " + ex.Message, "Importar cardapio",
+                MessageBoxButtons.OK, MessageBoxIcon.Error);
+        }
     }
 
     private static void AddCampo(TableLayoutPanel painel, int row, string rotulo, Control ctrl)
@@ -152,7 +208,7 @@ public sealed class FormGerenciarProdutos : Form
         _grid.Rows.Clear();
         foreach (var p in _produtos)
             _grid.Rows.Add(p.Id, p.Nome, Dinheiro.Formatar(p.PrecoCentavos), p.Categoria,
-                p.Atalho == 0 ? "" : p.Atalho.ToString(), p.Ativo ? "Sim" : "NAO");
+                p.Ativo ? "Sim" : "NAO");
 
         // categorias ATIVAS no combo (na ordem definida); usuario ainda pode digitar uma nova
         _cmbCategoria.Items.Clear();
@@ -170,7 +226,6 @@ public sealed class FormGerenciarProdutos : Form
         _txtNome.Text = p.Nome;
         _txtPreco.Text = (p.PrecoCentavos / 100m).ToString("0.00", CultureInfo.GetCultureInfo("pt-BR"));
         _cmbCategoria.Text = p.Categoria;
-        _numAtalho.Value = Math.Clamp(p.Atalho, 0, 9);
         _chkAtivo.Checked = p.Ativo;
         _lblStatus.ForeColor = Color.FromArgb(60, 60, 60);
         _lblStatus.Text = $"Editando: {p.Nome}" + (_servico.Repo.ProdutoTemVendas(p.Id) ? "\n(ja tem vendas - use Inativar, nao apague)" : "");
@@ -182,20 +237,10 @@ public sealed class FormGerenciarProdutos : Form
         _txtNome.Text = "";
         _txtPreco.Text = "0,00";
         _cmbCategoria.Text = "Geral";
-        _numAtalho.Value = ProximoAtalhoLivre();   // sugere um atalho automatico (editavel)
         _chkAtivo.Checked = true;
         _lblStatus.ForeColor = Color.FromArgb(60, 60, 60);
-        _lblStatus.Text = "Novo produto. Atalho sugerido automaticamente (voce pode trocar).";
+        _lblStatus.Text = "Novo produto. O atalho do teclado e automatico (letra da categoria + numero).";
         _txtNome.Focus();
-    }
-
-    /// <summary>Menor atalho 1-9 ainda nao usado por nenhum produto ativo (0 = todos ocupados).</summary>
-    private int ProximoAtalhoLivre()
-    {
-        var usados = _produtos.Where(p => p.Ativo).Select(p => p.Atalho).ToHashSet();
-        for (int k = 1; k <= 9; k++)
-            if (!usados.Contains(k)) return k;
-        return 0;
     }
 
     private void Salvar()
@@ -211,16 +256,7 @@ public sealed class FormGerenciarProdutos : Form
             AvisoStatus("Preço inválido (ex: 6,00)."); _txtPreco.Focus(); _txtPreco.SelectAll(); return;
         }
 
-        int atalho = (int)_numAtalho.Value;
         var id = _editandoId ?? GerarIdUnico(nome);
-
-        // garante unicidade do atalho: se outro produto ja usa esse atalho, libera-o.
-        if (atalho >= 1 && atalho <= 9)
-            foreach (var outro in _produtos.Where(p => p.Id != id && p.Atalho == atalho))
-            {
-                outro.Atalho = 0;
-                _servico.Repo.SalvarProduto(outro);
-            }
 
         var produto = new Produto
         {
@@ -228,7 +264,7 @@ public sealed class FormGerenciarProdutos : Form
             Nome = nome,
             PrecoCentavos = preco.Value,
             Categoria = string.IsNullOrWhiteSpace(_cmbCategoria.Text) ? "Geral" : _cmbCategoria.Text.Trim(),
-            Atalho = atalho,
+            Atalho = 0,   // legado: atalho do teclado agora e por posicao (nao cadastrado)
             Ativo = _chkAtivo.Checked
         };
         _servico.GarantirCategoria(produto.Categoria);   // cria a categoria se for nova
@@ -257,6 +293,43 @@ public sealed class FormGerenciarProdutos : Form
         NovoProduto();
         _lblStatus.ForeColor = Color.FromArgb(180, 80, 0);
         _lblStatus.Text = "Produto inativado (oculto do caixa).";
+    }
+
+    private void Excluir()
+    {
+        if (_editandoId is null)
+        {
+            AvisoStatus("Selecione um produto na lista para excluir.");
+            return;
+        }
+        var nome = _txtNome.Text.Trim();
+
+        // TRAVA: produto com vendas NUNCA e apagado (protege a auditoria) -> so Inativar.
+        if (_servico.Repo.ProdutoTemVendas(_editandoId))
+        {
+            MessageBox.Show(
+                $"'{nome}' ja tem vendas registradas e NAO pode ser excluido (isso quebraria o historico).\n\n" +
+                "Use 'Inativar' para oculta-lo do caixa.",
+                "Excluir produto", MessageBoxButtons.OK, MessageBoxIcon.Warning);
+            return;
+        }
+
+        // dupla confirmacao para acao destrutiva e irreversivel.
+        var r = MessageBox.Show(
+            $"EXCLUIR permanentemente o produto '{nome}'?\n\nEssa acao NAO pode ser desfeita.",
+            "Excluir produto", MessageBoxButtons.YesNo, MessageBoxIcon.Warning);
+        if (r != DialogResult.Yes) return;
+        var r2 = MessageBox.Show(
+            $"Tem certeza? '{nome}' sera apagado de vez.",
+            "Confirmar exclusao", MessageBoxButtons.YesNo, MessageBoxIcon.Warning,
+            MessageBoxDefaultButton.Button2);
+        if (r2 != DialogResult.Yes) return;
+
+        _servico.Repo.ExcluirProduto(_editandoId);
+        CarregarGrid();
+        NovoProduto();
+        _lblStatus.ForeColor = Color.FromArgb(160, 0, 0);
+        _lblStatus.Text = $"Produto '{nome}' excluido permanentemente.";
     }
 
     private void AvisoStatus(string msg)

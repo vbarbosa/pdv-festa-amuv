@@ -9,6 +9,11 @@
   </PropertyGroup>
 
   <ItemGroup>
+    <!-- expoe membros internal (ex: PareceTermica) para o projeto de testes -->
+    <InternalsVisibleTo Include="PdvFesta.Tests" />
+  </ItemGroup>
+
+  <ItemGroup>
     <!-- SQLite oficial: o binario nativo e_sqlite3 e embutido no publish single-file -->
     <PackageReference Include="Microsoft.Data.Sqlite" Version="8.0.8" />
     <!-- Codepage PC860 (Portugues) para acentos na impressora termica -->

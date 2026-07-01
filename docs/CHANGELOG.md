@@ -3,6 +3,47 @@
 Formato baseado em [Keep a Changelog](https://keepachangelog.com/pt-BR/).
 Versionamento [SemVer](https://semver.org/lang/pt-BR/).
 
+## [2.4.0] — Gestão avançada, permissões e QA em sandbox
+
+### Adicionado
+- **Sistema de permissões por ação**: o admin delega, numa tela (com senha), quais ações o
+  operador faz sem senha. Inclui trocar a senha de administrador. Ver ADR-0020.
+- **Excluir seguro** em Produtos/Categorias/Promoções: exclusão permanente com dupla
+  confirmação e **trava** (item com uso só pode Inativar). Ver ADR-0021.
+- **Versionamento do cardápio**: exportar/importar o catálogo como `.json` datado. ADR-0021.
+- **Painel em tempo real (F4)**: dashboard com Total em Gaveta, faturamento e itens mais
+  vendidos, auto-atualizado, sem senha (só visualização).
+- **Pagamento estilo PDV**: notas/moedas de R$1 a R$200 que **somam**, botões Exato e Limpar,
+  campo de recebido vazio ao abrir.
+- **Layout do Cupom**: preview renderiza os vales destacáveis; botão "Imprimir teste de layout".
+- **Vales viram o modo PADRÃO** do cupom (a reimpressão já sai com os vales).
+- **QA em sandbox Hyper-V**: scripts de VM descartável + E2E com screenshots por etapa. ADR-0022.
+- **Tela Sobre** e **tela da Impressora** reformuladas (status online, tipo USB/Bluetooth,
+  detecção automática).
+
+### Alterado
+- **Atalho legado removido** (coluna/campo de atalho e tela "Customizar Atalhos"): a
+  navegação por teclado é 100% por posição (letra da categoria + número).
+- Testes E2E de UI agora são **condicionais** (rodam só na sandbox; no-op fora).
+- **App robusto em sessão não-interativa**: o tratador de erro não derruba mais o app ao
+  reportar (usa `DefaultDesktopOnly`/só-loga) — essencial para automação/headless.
+
+### Corrigido
+- **Impressão de vales**: margem antes do 1º vale (não fica colado no cabeçalho) e sem
+  excesso de papel após o último vale.
+- **Anti-duplo-clique** nos botões "Imprimir teste" (Layout e Config Impressora): não
+  imprime duas vezes se o operador clicar rápido.
+
+### Testes e QA
+- **203 testes unitários** (subindo de 157): além dos anteriores, cobrem **permissões**
+  (defaults, regra fixa, persistência), **troca de operador** (fecha/abre turno, fundo),
+  **soma de notas** do pagamento, **auto-detecção de impressora** (USB>Bluetooth), **backup
+  automático** (agendador) e **dados do dashboard** (gaveta/faturamento/itens).
+- **QA em sandbox Hyper-V funcionando de ponta a ponta**: a bateria E2E roda **dentro de uma
+  VM descartável** (checkpoint → injeta → instala → testa na sessão interativa → extrai
+  screenshots → rollback), 5/6 aprovados + 1 skip de impressora, com evidências visuais reais
+  das telas (pagamento estilo PDV, painel em tempo real, histórico). Scripts em `qa/`.
+
 ## [2.3.0] — Fichas de vales, navegação por teclado e robustez de impressão
 
 ### Adicionado

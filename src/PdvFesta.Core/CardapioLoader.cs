@@ -78,4 +78,51 @@ public static class CardapioLoader
         // Promocoes/combos iniciais (ex: os combos "ate 20h" do cartaz) - so se vazio.
         repo.SemearPromocoesSeVazio(cardapio.Promocoes.Select(s => s.ParaPromocao()));
     }
+
+    private static readonly JsonSerializerOptions OptsExport = new()
+    {
+        PropertyNameCaseInsensitive = true,
+        WriteIndented = true,
+        Converters = { new JsonStringEnumConverter() },
+        Encoder = System.Text.Encodings.Web.JavaScriptEncoder.UnsafeRelaxedJsonEscaping
+    };
+
+    /// <summary>
+    /// EXPORTA o cardapio atual do banco (produtos + categorias em ordem + titulo) para um
+    /// arquivo .json VERSIONADO (com data/hora no nome). Serve pra salvar, mover para outro
+    /// PC ou voltar a uma versao anterior. Retorna o caminho gerado.
+    /// </summary>
+    public static string ExportarParaPasta(Repositorio repo, string pastaDestino)
+    {
+        Directory.CreateDirectory(pastaDestino);
+        var cardapio = new Cardapio
+        {
+            TituloCupom = repo.LerConfig("titulo_cupom", "FESTA"),
+            Produtos = repo.ListarProdutos(),
+            Categorias = repo.ListarCategorias(incluirInativas: true).Select(c => c.Nome).ToList()
+            // promocoes ficam no seed/JSON original; o versionamento foca em produtos/categorias.
+        };
+        var nome = $"cardapio_{DateTime.Now:yyyy-MM-dd_HHmmss}.json";
+        var caminho = Path.Combine(pastaDestino, nome);
+        File.WriteAllText(caminho, JsonSerializer.Serialize(cardapio, OptsExport));
+        return caminho;
+    }
+
+    /// <summary>
+    /// IMPORTA um cardapio de um arquivo .json, SUBSTITUINDO o catalogo atual (produtos e
+    /// categorias). Nao apaga vendas nem turnos — so o cardapio. Retorna quantos produtos
+    /// foram importados.
+    /// </summary>
+    public static int ImportarDeArquivo(Repositorio repo, string caminho)
+    {
+        var cardapio = CarregarDeArquivo(caminho);
+        repo.SalvarCatalogo(cardapio.Produtos);   // DELETE + INSERT (substitui o catalogo)
+        if (!string.IsNullOrWhiteSpace(cardapio.TituloCupom))
+            repo.SalvarConfig("titulo_cupom", cardapio.TituloCupom);
+        // categorias: garante que todas existam (na ordem do arquivo).
+        int ordem = 0;
+        foreach (var nome in cardapio.Categorias)
+            repo.SalvarCategoria(new Categoria { Nome = nome, Ordem = ordem++, Ativo = true });
+        return cardapio.Produtos.Count;
+    }
 }

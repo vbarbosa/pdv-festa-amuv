@@ -23,3 +23,12 @@ dumps/
 # OS
 Thumbs.db
 Desktop.ini
+
+# ISOs de teste (VM Hyper-V) - nunca versionar (arquivos gigantes)
+qa/isos/
+*.iso
+
+# Resultados de teste, screenshots e temporarios do QA (nao versionar)
+test-reports/
+qa/_ultimo_run.log
+qa/_run_auto.ps1

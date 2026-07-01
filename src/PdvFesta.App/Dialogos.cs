@@ -42,4 +42,16 @@ public static class Dialogos
         AjusteLayout.Blindar(f);
         return f.ShowDialog(owner) == DialogResult.OK;
     }
+
+    /// <summary>
+    /// Libera uma ACAO conforme a politica de permissoes: se o admin marcou que a acao
+    /// exige senha, pede a senha; se liberou, passa direto (retorna true). Centraliza a
+    /// decisao — as telas so dizem QUAL acao vao fazer.
+    /// </summary>
+    public static bool LiberarAcao(IWin32Window owner, Servico servico, AcaoProtegida acao)
+    {
+        var perm = new Permissoes(servico);
+        if (!perm.ExigeSenha(acao)) return true;      // liberada -> sem senha
+        return LiberarAdmin(owner, servico);          // exige -> pede a senha
+    }
 }

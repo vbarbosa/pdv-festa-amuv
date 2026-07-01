@@ -5,6 +5,8 @@
     <ImplicitUsings>enable</ImplicitUsings>
     <Nullable>enable</Nullable>
     <IsPackable>false</IsPackable>
+    <!-- WinForms: usado para capturar screenshots de evidencia (Screen/Bitmap). -->
+    <UseWindowsForms>true</UseWindowsForms>
     <!-- E2E depende de tela/UI real; roda LOCAL, nao no CI headless. -->
   </PropertyGroup>
 

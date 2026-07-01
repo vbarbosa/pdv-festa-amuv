@@ -25,3 +25,6 @@ de Michael Nygard.
 | [0017](0017-impressao-sem-acento-e-robustez.md) | Impressão sem acento + robustez plug-and-play da impressora | Aceito |
 | [0018](0018-hardening-ui-e-video-demo.md) | Hardening de UI, testes E2E e vídeo de demonstração | Aceito |
 | [0019](0019-troca-operador-batimento.md) | Troca de operador com batimento de caixa opcional | Aceito |
+| [0020](0020-permissoes-por-acao.md) | Permissões por ação (admin delega ao operador) | Aceito |
+| [0021](0021-crud-excluir-seguro-e-versionamento-cardapio.md) | Excluir seguro no CRUD + versionamento do cardápio | Aceito |
+| [0022](0022-qa-sandbox-hyperv.md) | QA em sandbox volátil (Hyper-V) para testes E2E | Aceito |

@@ -454,6 +454,22 @@ ON CONFLICT(id) DO UPDATE SET
         return Convert.ToInt64(cmd.ExecuteScalar() ?? 0L) == 1;
     }
 
+    /// <summary>
+    /// EXCLUSAO PERMANENTE de um produto (DELETE de verdade). So permitida se o produto
+    /// NAO tem vendas — caso contrario lanca (protege a auditoria; use Inativar). O chamador
+    /// deve confirmar com o usuario antes.
+    /// </summary>
+    public void ExcluirProduto(string id)
+    {
+        if (ProdutoTemVendas(id))
+            throw new InvalidOperationException("Produto tem vendas registradas; use Inativar (nao pode excluir).");
+        using var conn = Abrir();
+        using var cmd = conn.CreateCommand();
+        cmd.CommandText = "DELETE FROM produtos WHERE id = $id;";
+        cmd.Parameters.AddWithValue("$id", id);
+        cmd.ExecuteNonQuery();
+    }
+
     /// <summary>True se o Id de produto ja existe no catalogo.</summary>
     public bool ProdutoExiste(string id)
     {
@@ -501,6 +517,31 @@ ON CONFLICT(nome) DO UPDATE SET ordem = excluded.ordem, ativo = excluded.ativo;"
         using var conn = Abrir();
         using var cmd = conn.CreateCommand();
         cmd.CommandText = "UPDATE categorias SET ativo = 0 WHERE nome = $n;";
+        cmd.Parameters.AddWithValue("$n", nome);
+        cmd.ExecuteNonQuery();
+    }
+
+    /// <summary>Quantos produtos (ativos ou nao) pertencem a esta categoria.</summary>
+    public int ContarProdutosDaCategoria(string nome)
+    {
+        using var conn = Abrir();
+        using var cmd = conn.CreateCommand();
+        cmd.CommandText = "SELECT COUNT(*) FROM produtos WHERE categoria = $n;";
+        cmd.Parameters.AddWithValue("$n", nome);
+        return Convert.ToInt32(cmd.ExecuteScalar() ?? 0);
+    }
+
+    /// <summary>
+    /// EXCLUSAO PERMANENTE de categoria (DELETE). So permitida se NENHUM produto usa a
+    /// categoria — senao lanca (evita orfaos). O chamador confirma antes.
+    /// </summary>
+    public void ExcluirCategoria(string nome)
+    {
+        if (ContarProdutosDaCategoria(nome) > 0)
+            throw new InvalidOperationException("Categoria tem produtos; mova/exclua os produtos ou use Inativar.");
+        using var conn = Abrir();
+        using var cmd = conn.CreateCommand();
+        cmd.CommandText = "DELETE FROM categorias WHERE nome = $n;";
         cmd.Parameters.AddWithValue("$n", nome);
         cmd.ExecuteNonQuery();
     }
@@ -622,6 +663,32 @@ VALUES ($d,$t,$v,$hi,$hf,$a); SELECT last_insert_rowid();";
         cmd.CommandText = "UPDATE promocoes SET ativo=0 WHERE id=$id;";
         cmd.Parameters.AddWithValue("$id", id);
         cmd.ExecuteNonQuery();
+    }
+
+    /// <summary>
+    /// EXCLUSAO PERMANENTE de promocao (DELETE da promocao + seus itens). Seguro: a venda
+    /// grava a LINHA de desconto, nao a promocao — excluir nao afeta vendas passadas.
+    /// O chamador confirma antes.
+    /// </summary>
+    public void ExcluirPromocao(long id)
+    {
+        using var conn = Abrir();
+        using var tx = conn.BeginTransaction();
+        using (var itens = conn.CreateCommand())
+        {
+            itens.Transaction = tx;
+            itens.CommandText = "DELETE FROM promocao_itens WHERE promocao_id=$id;";
+            itens.Parameters.AddWithValue("$id", id);
+            itens.ExecuteNonQuery();
+        }
+        using (var promo = conn.CreateCommand())
+        {
+            promo.Transaction = tx;
+            promo.CommandText = "DELETE FROM promocoes WHERE id=$id;";
+            promo.Parameters.AddWithValue("$id", id);
+            promo.ExecuteNonQuery();
+        }
+        tx.Commit();
     }
 
     /// <summary>Semeia promocoes SOMENTE se a tabela estiver vazia (idempotente).</summary>

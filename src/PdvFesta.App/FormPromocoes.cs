@@ -107,6 +107,7 @@ public sealed class FormPromocoes : Form
         barra.Controls.Add(Botao("Novo", Color.FromArgb(70, 70, 90), 90, (s, e) => Novo()));
         barra.Controls.Add(Botao("Salvar", Color.FromArgb(0, 130, 0), 120, (s, e) => Salvar()));
         barra.Controls.Add(Botao("Inativar", Color.FromArgb(180, 80, 0), 100, (s, e) => Inativar()));
+        barra.Controls.Add(Botao("Excluir", Color.FromArgb(160, 0, 0), 100, (s, e) => Excluir()));
         Full(barra);
 
         _lblStatus.Dock = DockStyle.Fill; _lblStatus.Height = 44; _lblStatus.ForeColor = Color.FromArgb(60, 60, 60);
@@ -251,10 +252,32 @@ public sealed class FormPromocoes : Form
     private void Inativar()
     {
         if (_editandoId <= 0) { Aviso("Selecione uma promoção para inativar."); return; }
+        var r = MessageBox.Show(
+            $"Inativar a promoção \"{_txtDesc.Text.Trim()}\"?\nEla para de valer, mas fica salva.",
+            "Inativar promoção", MessageBoxButtons.YesNo, MessageBoxIcon.Question);
+        if (r != DialogResult.Yes) return;
         _servico.InativarPromocao(_editandoId);
         CarregarGrid(); Novo();
         _lblStatus.ForeColor = Color.FromArgb(180, 80, 0);
         _lblStatus.Text = "Promocao inativada.";
+    }
+
+    private void Excluir()
+    {
+        if (_editandoId <= 0) { Aviso("Selecione uma promoção para excluir."); return; }
+        var desc = _txtDesc.Text.Trim();
+        // Promocoes podem ser excluidas com seguranca: a venda grava a LINHA de desconto,
+        // nao a promocao. Excluir nao afeta vendas passadas. Mesmo assim, confirma.
+        var r = MessageBox.Show(
+            $"EXCLUIR permanentemente a promoção \"{desc}\"?\n\nEssa acao NAO pode ser desfeita.",
+            "Excluir promoção", MessageBoxButtons.YesNo, MessageBoxIcon.Warning,
+            MessageBoxDefaultButton.Button2);
+        if (r != DialogResult.Yes) return;
+
+        _servico.ExcluirPromocao(_editandoId);
+        CarregarGrid(); Novo();
+        _lblStatus.ForeColor = Color.FromArgb(160, 0, 0);
+        _lblStatus.Text = "Promocao excluida permanentemente.";
     }
 
     private void Aviso(string m) { _lblStatus.ForeColor = Color.FromArgb(180, 0, 0); _lblStatus.Text = m; }

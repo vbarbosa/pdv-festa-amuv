@@ -83,15 +83,17 @@ public sealed class FormPagamento : Form
         _txtRecebido.TextAlign = HorizontalAlignment.Right;
         _txtRecebido.TextChanged += (s, e) => AtualizarTroco();
 
-        // ---- botoes de valor rapido ----
+        // ---- botoes de valor rapido (estilo PDV) ----
         _painelRapido.Dock = DockStyle.Top;
-        _painelRapido.Height = 96;
+        _painelRapido.Height = 150;
         _painelRapido.Padding = new Padding(8);
         _painelRapido.AutoScroll = true;
-        _painelRapido.Controls.Add(BotaoRapido("Exato", _totalCentavos));
-        foreach (var nota in new[] { 1000, 2000, 5000, 10000, 20000 })
-            if (nota >= _totalCentavos || nota == 2000 || nota == 5000)
-                _painelRapido.Controls.Add(BotaoRapido(Dinheiro.Formatar(nota).Replace("R$ ", "R$"), nota));
+        // "Exato" preenche o total certinho; "Limpar" zera. As notas/moedas do Real SOMAM
+        // (cliente pagou com varias: clica R$50 + R$20 -> 70,00), como num PDV de verdade.
+        _painelRapido.Controls.Add(BotaoExato());
+        _painelRapido.Controls.Add(BotaoLimpar());
+        foreach (var nota in new[] { 100, 200, 500, 1000, 2000, 5000, 10000, 20000 })
+            _painelRapido.Controls.Add(BotaoSomarNota(nota));
 
         _lblTroco.Dock = DockStyle.Top; _lblTroco.Height = 72;
         _lblTroco.Font = new Font("Segoe UI", 26F, FontStyle.Bold);
@@ -125,21 +127,49 @@ public sealed class FormPagamento : Form
         b.Click += (s, e) => SelecionarForma(forma);
     }
 
-    private Button BotaoRapido(string texto, int centavos)
+    private static Button BaseBotao(string texto, string nome, Color cor)
     {
-        var b = new Button
+        return new Button
         {
-            Text = texto, Width = 84, Height = 40, Margin = new Padding(4),
+            Text = texto, Width = 88, Height = 42, Margin = new Padding(4),
             FlatStyle = FlatStyle.Flat, Font = new Font("Segoe UI", 11F, FontStyle.Bold),
-            BackColor = Color.FromArgb(235, 235, 235), TabStop = false,
-            Name = "btnRapido_" + centavos     // AutomationId (usado pela demo do video)
+            BackColor = cor, TabStop = false, Name = nome
         };
+    }
+
+    /// <summary>"Exato": preenche o valor recebido com o total (troco 0).</summary>
+    private Button BotaoExato()
+    {
+        var b = BaseBotao("Exato", "btnRapido_" + _totalCentavos, Color.FromArgb(210, 235, 210));
+        b.Click += (s, e) => { DefinirRecebido(_totalCentavos); };
+        return b;
+    }
+
+    /// <summary>"Limpar": zera o valor recebido.</summary>
+    private Button BotaoLimpar()
+    {
+        var b = BaseBotao("Limpar", "btnLimparRecebido", Color.FromArgb(245, 220, 210));
+        b.Click += (s, e) => { DefinirRecebido(0); };
+        return b;
+    }
+
+    /// <summary>Botao de nota/moeda do Real: SOMA o valor ao recebido (estilo PDV).</summary>
+    private Button BotaoSomarNota(int centavos)
+    {
+        var b = BaseBotao(Dinheiro.Formatar(centavos).Replace("R$ ", "R$"),
+                          "btnNota_" + centavos, Color.FromArgb(235, 235, 235));
         b.Click += (s, e) =>
         {
-            _txtRecebido.Text = (centavos / 100m).ToString("0.00", System.Globalization.CultureInfo.GetCultureInfo("pt-BR"));
-            _txtRecebido.Focus(); _txtRecebido.SelectAll();
+            var atual = Dinheiro.ParseCentavos(_txtRecebido.Text) ?? 0;
+            DefinirRecebido(atual + centavos);
         };
         return b;
+    }
+
+    private void DefinirRecebido(int centavos)
+    {
+        _txtRecebido.Text = (centavos / 100m).ToString("0.00", System.Globalization.CultureInfo.GetCultureInfo("pt-BR"));
+        _txtRecebido.Focus(); _txtRecebido.SelectAll();
     }
 
     private void SelecionarForma(FormaPagamento forma)

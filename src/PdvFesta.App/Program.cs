@@ -43,10 +43,8 @@ internal static class Program
         catch (Exception ex)
         {
             Registrar(ex, "Startup");
-            MessageBox.Show(
-                "Erro ao iniciar o PDV:\n\n" + ex.Message +
-                "\n\n(Detalhes salvos na pasta logs)",
-                "PDV Festa", MessageBoxButtons.OK, MessageBoxIcon.Error);
+            Avisar("Erro ao iniciar o PDV:\n\n" + ex.Message + "\n\n(Detalhes salvos na pasta logs)",
+                "PDV Festa", MessageBoxIcon.Error);
         }
     }
 
@@ -55,10 +53,25 @@ internal static class Program
     {
         if (ex is null) return;
         Log.Erro($"({origem}) erro nao tratado", ex);
+        Avisar("Ocorreu um erro inesperado, mas o sistema continua funcionando.\n" +
+            "Se persistir, reinicie o programa.\n\nDetalhe: " + ex.Message, "Aviso", MessageBoxIcon.Warning);
+    }
 
-        MessageBox.Show(
-            "Ocorreu um erro inesperado, mas o sistema continua funcionando.\n" +
-            "Se persistir, reinicie o programa.\n\nDetalhe: " + ex.Message,
-            "Aviso", MessageBoxButtons.OK, MessageBoxIcon.Warning);
+    /// <summary>
+    /// MessageBox seguro: em sessao NAO-interativa (automacao/servico/CI), mostrar dialogo
+    /// lanca InvalidOperationException e derrubaria o app EM CASCATA ao reportar um erro.
+    /// Aqui usamos DefaultDesktopOnly quando nao ha UserInteractive; se ainda falhar, so loga.
+    /// </summary>
+    private static void Avisar(string texto, string titulo, MessageBoxIcon icone)
+    {
+        try
+        {
+            var opts = Environment.UserInteractive
+                ? default
+                : MessageBoxOptions.DefaultDesktopOnly;
+            MessageBox.Show(texto, titulo, MessageBoxButtons.OK, icone,
+                MessageBoxDefaultButton.Button1, opts);
+        }
+        catch { /* sem UI (headless): o log ja registrou; nunca derrubar por causa do aviso */ }
     }
 }

@@ -159,7 +159,7 @@ public sealed class FormHistoricoVendas : Form
         }
 
         // trava de admin: operador comum nao estorna sozinho
-        if (!Dialogos.LiberarAdmin(this, _servico)) return;
+        if (!Dialogos.LiberarAcao(this, _servico, AcaoProtegida.EstornarVenda)) return;
 
         var r = MessageBox.Show(
             $"Cancelar a venda #{venda.Id} ({CupomFormatter.Moeda(venda.TotalCentavos)} - {CupomFormatter.NomeForma(venda.Forma)})?\n\n" +

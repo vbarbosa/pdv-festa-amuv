@@ -56,7 +56,7 @@ public static class PrinterDiscovery
     }
 
     /// <summary>Uma impressora parece ser uma termica de cupom (MPT/POS/58mm/thermal/ZJiang)?</summary>
-    private static bool PareceTermica(string nome) =>
+    internal static bool PareceTermica(string nome) =>
         nome.Contains("MPT", StringComparison.OrdinalIgnoreCase) ||
         nome.Contains("POS", StringComparison.OrdinalIgnoreCase) ||
         nome.Contains("58", StringComparison.OrdinalIgnoreCase) ||

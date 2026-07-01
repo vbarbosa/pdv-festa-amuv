@@ -75,6 +75,7 @@ public sealed class Servico : IDisposable
     public List<Promocao> PromocoesAtivas() => _promosCache ??= Repo.ListarPromocoes(incluirInativas: false);
     public long SalvarPromocao(Promocao p) { var id = Repo.SalvarPromocao(p); RecarregarPromocoes(); return id; }
     public void InativarPromocao(long id) { Repo.InativarPromocao(id); RecarregarPromocoes(); }
+    public void ExcluirPromocao(long id) { Repo.ExcluirPromocao(id); RecarregarPromocoes(); }
     public void RecarregarPromocoes() => _promosCache = Repo.ListarPromocoes(incluirInativas: false);
 
     /// <summary>Reavalia os combos/promocoes sobre o carrinho atual (chamar a cada add/remove).</summary>
@@ -85,6 +86,12 @@ public sealed class Servico : IDisposable
     public List<Categoria> CategoriasAtivas() => Repo.ListarCategorias(incluirInativas: false);
     public void SalvarCategoria(Categoria c) => Repo.SalvarCategoria(c);
     public void InativarCategoria(string nome) => Repo.InativarCategoria(nome);
+    public int ContarProdutosDaCategoria(string nome) => Repo.ContarProdutosDaCategoria(nome);
+    public void ExcluirCategoria(string nome) => Repo.ExcluirCategoria(nome);
+
+    // ----- versionamento do cardapio (exportar/importar .json) -----
+    public string ExportarCardapio(string pastaDestino) => CardapioLoader.ExportarParaPasta(Repo, pastaDestino);
+    public int ImportarCardapio(string caminho) => CardapioLoader.ImportarDeArquivo(Repo, caminho);
 
     /// <summary>Garante que a categoria exista (cria no fim da ordem se for nova).</summary>
     public void GarantirCategoria(string nome)
