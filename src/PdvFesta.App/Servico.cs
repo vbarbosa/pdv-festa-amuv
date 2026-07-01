@@ -135,6 +135,20 @@ public sealed class Servico : IDisposable
         return Caixa.ContarItens(Repo.ListarVendasPorCaixa(TurnoAtual.Id));
     }
 
+    /// <summary>Vendas do turno atual (para a tela de historico/estorno).</summary>
+    public List<Venda> VendasDoTurno()
+    {
+        if (TurnoAtual is null) return new();
+        return Repo.ListarVendasPorCaixa(TurnoAtual.Id);
+    }
+
+    /// <summary>Estorna (cancela) uma venda: soft delete + rastro no log.</summary>
+    public void CancelarVenda(long vendaId)
+    {
+        Repo.CancelarVenda(vendaId);
+        Log.Aviso($"Venda #{vendaId} CANCELADA (estorno) no caixa #{TurnoAtual?.Id}");
+    }
+
     /// <summary>
     /// Fecha a venda atual: persiste (dado seguro PRIMEIRO) e imprime o cupom.
     /// Retorna a venda salva + o resultado da impressao (ok, msg) para a UI decidir

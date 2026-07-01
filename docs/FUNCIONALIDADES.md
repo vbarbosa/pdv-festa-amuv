@@ -22,6 +22,16 @@ Lista das funcionalidades do produto, com critérios de aceite e onde vivem no c
   oferece **Repetir/Ignorar**.
 - **Código:** `FormPagamento`, `Servico.FinalizarVenda`.
 
+## 2.1 Correção de pedido e estorno (audit trail)
+- **Pré-venda**: remover item do carrinho por **Delete/Backspace** ou botão **"Remover Item
+  Selecionado"**; total recalcula na hora. `Esc` limpa tudo.
+- **Pós-venda**: **Histórico de Vendas** (`F3`/menu) lista as vendas do turno; **Cancelar/
+  Estornar** exige **senha de admin** e avisa que o estorno físico (maquininha/dinheiro) é
+  manual.
+- **Soft delete**: a venda vira `Cancelada` (nunca é apagada). Canceladas saem dos totais,
+  do **Total em Gaveta** e da **Leitura Z** → conciliação exata.
+- **Código:** `FormHistoricoVendas`, `Repositorio.CancelarVenda`, `Caixa.Consolidar/ContarItens`.
+
 ## 3. Turno de caixa
 - **Abertura** com fundo de caixa (troco inicial). Sem caixa aberto, não vende.
 - **Sangria** (retirada) e **Suprimento** (entrada) de dinheiro.

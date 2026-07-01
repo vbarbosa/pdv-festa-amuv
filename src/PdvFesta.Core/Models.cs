@@ -68,6 +68,13 @@ public sealed class ItemVenda
     public int SubtotalCentavos => PrecoUnitarioCentavos * Quantidade;
 }
 
+/// <summary>Situacao de uma venda (estorno = soft delete, nunca apaga do banco).</summary>
+public enum StatusVenda
+{
+    Concluida = 0,
+    Cancelada = 1
+}
+
 /// <summary>Venda finalizada e persistida.</summary>
 public sealed class Venda
 {
@@ -82,6 +89,10 @@ public sealed class Venda
     public string Operador { get; set; } = "";
     /// <summary>Turno de caixa ao qual a venda pertence (null = venda legada sem turno).</summary>
     public long? CaixaId { get; set; }
+    /// <summary>Concluida ou Cancelada (estornada). Canceladas saem dos totais do caixa.</summary>
+    public StatusVenda Status { get; set; } = StatusVenda.Concluida;
+
+    public bool Cancelada => Status == StatusVenda.Cancelada;
 }
 
 /// <summary>Situacao de um turno/sessao de caixa.</summary>

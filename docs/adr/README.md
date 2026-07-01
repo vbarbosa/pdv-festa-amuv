@@ -18,3 +18,4 @@ de Michael Nygard.
 | [0010](0010-graficos-gdi.md) | Gráficos do dashboard em GDI+ próprio (sem lib de chart) | Aceito |
 | [0011](0011-blindagem-e-logs.md) | Blindagem global de exceções + logs em arquivo | Aceito |
 | [0012](0012-formas-pagamento-estaveis.md) | Valores do enum de pagamento estáveis e aditivos | Aceito |
+| [0013](0013-estorno-audit-trail.md) | Estorno de venda por soft delete (audit trail) | Aceito |

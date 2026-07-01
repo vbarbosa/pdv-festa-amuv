@@ -64,10 +64,14 @@ public static class Caixa
         return recebidoCentavos - totalCentavos;
     }
 
-    /// <summary>Consolida uma lista de vendas em um resumo por forma de pagamento.</summary>
+    /// <summary>
+    /// Consolida uma lista de vendas em um resumo por forma de pagamento.
+    /// Vendas CANCELADAS (estornadas) sao ignoradas — assim a gaveta bate centavo a centavo.
+    /// </summary>
     public static ResumoCaixa Consolidar(IEnumerable<Venda> vendas)
     {
-        var lista = vendas as ICollection<Venda> ?? vendas.ToList();
+        var lista = (vendas as ICollection<Venda> ?? vendas.ToList())
+            .Where(v => !v.Cancelada).ToList();
 
         int dinheiro = lista.Where(v => v.Forma == FormaPagamento.Dinheiro).Sum(v => v.TotalCentavos);
         int pix = lista.Where(v => v.Forma == FormaPagamento.Pix).Sum(v => v.TotalCentavos);
@@ -116,6 +120,7 @@ public static class Caixa
     public static List<ItemVendido> ContarItens(IEnumerable<Venda> vendas)
     {
         return vendas
+            .Where(v => !v.Cancelada)          // itens de vendas canceladas nao contam
             .SelectMany(v => v.Itens)
             .GroupBy(i => i.Nome)
             .Select(g => new ItemVendido

@@ -48,6 +48,15 @@ Guia rápido para quem vai operar o caixa no dia da festa. Não precisa saber de
 | `F9` | Fechamento de caixa (pede senha) |
 | `F12` | Configurar impressora (pede senha) |
 
+## 4.1 Corrigir pedido e cancelar venda
+
+- **Tirou um item errado do carrinho?** Clique nele na lista e aperte **Delete** (ou
+  **Backspace**), ou use o botão laranja **Remover Item Selecionado**. Para limpar tudo: **Esc**.
+- **Cliente desistiu depois de pagar?** Aperte **F3** (Histórico de Vendas) → selecione a
+  venda → **Cancelar/Estornar** → digite a **senha de admin**. 
+  > ⚠️ O dinheiro/estorno no cartão é devolvido **na mão**; o sistema só registra o
+  > cancelamento. A venda cancelada some dos totais (a gaveta continua batendo).
+
 ## 5. Durante a festa (tesoureiro)
 
 Telas protegidas por **senha de administrador** (padrão: **0000**).

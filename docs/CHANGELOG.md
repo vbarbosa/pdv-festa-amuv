@@ -3,6 +3,21 @@
 Formato baseado em [Keep a Changelog](https://keepachangelog.com/pt-BR/).
 Versionamento [SemVer](https://semver.org/lang/pt-BR/).
 
+## [2.1.0] — Correção de carrinho e estorno de vendas
+
+### Adicionado
+- **Remover item do carrinho** (pré-venda): tecla `Delete`/`Backspace` na grade ou botão
+  **"Remover Item Selecionado"**; o total recalcula na hora.
+- **Histórico de Vendas do turno** (`F3` / menu Arquivo): lista Id, hora, total, pagamento e
+  status das vendas do turno.
+- **Estorno/cancelamento** de venda com **trava de admin** + aviso de estorno físico. É
+  **soft delete** (status `Cancelada`): a venda nunca é apagada (audit trail), mas sai dos
+  totais, do **Total em Gaveta** e da **Leitura Z** — a conciliação bate centavo a centavo.
+
+### Migração
+- `vendas.status` adicionado via `ALTER TABLE` (bancos antigos preservados; migração agora
+  cobre `caixa_id` e `status` juntas).
+
 ## [2.0.1] — Impressão Bluetooth
 
 ### Adicionado

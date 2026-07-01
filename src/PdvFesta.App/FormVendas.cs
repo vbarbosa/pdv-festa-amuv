@@ -119,6 +119,7 @@ public sealed class FormVendas : Form
 
         var mArquivo = new ToolStripMenuItem("&Arquivo");
         mArquivo.DropDownItems.Add("Abrir Caixa...", null, (s, e) => AbrirCaixaMenu());
+        mArquivo.DropDownItems.Add(Item("Historico de Vendas", Keys.F3, (s, e) => AbrirHistorico()));
         mArquivo.DropDownItems.Add(Item("Fechamento de Caixa", Keys.F9, (s, e) => AbrirFechamento()));
         mArquivo.DropDownItems.Add(new ToolStripSeparator());
         mArquivo.DropDownItems.Add("Sair", null, (s, e) => Close());
@@ -217,7 +218,7 @@ public sealed class FormVendas : Form
         _grid.Columns["sub"]!.DefaultCellStyle.Alignment = DataGridViewContentAlignment.MiddleRight;
         _grid.KeyDown += (s, e) =>
         {
-            if (e.KeyCode == Keys.Delete) RemoverSelecionado();
+            if (e.KeyCode is Keys.Delete or Keys.Back) { RemoverSelecionado(); e.Handled = true; }
         };
 
         // TOTAL gigante
@@ -245,10 +246,20 @@ public sealed class FormVendas : Form
         var gridHost = new Panel { Dock = DockStyle.Fill, Padding = new Padding(6, 4, 8, 4), BackColor = Color.White };
         gridHost.Controls.Add(_grid);
 
-        // Dock: fill primeiro, depois bordas
+        // botao visivel de correcao de pedido (alem de Delete/Backspace na grid)
+        var btnRemover = new Button
+        {
+            Text = "Remover Item Selecionado (Del)", Dock = DockStyle.Top, Height = 34,
+            BackColor = Color.FromArgb(200, 120, 40), ForeColor = Color.White,
+            FlatStyle = FlatStyle.Flat, Font = new Font("Segoe UI", 10F, FontStyle.Bold), TabStop = false
+        };
+        btnRemover.Click += (s, e) => RemoverSelecionado();
+
+        // Dock: fill primeiro, depois bordas (cab fica no topo; btnRemover logo abaixo)
         painel.Controls.Add(gridHost);
         painel.Controls.Add(barra);
         painel.Controls.Add(_lblTotal);
+        painel.Controls.Add(btnRemover);
         painel.Controls.Add(cab);
     }
 
@@ -480,6 +491,19 @@ public sealed class FormVendas : Form
             AtualizarCarrinho();
             AtualizarStatus();
         }
+    }
+
+    private void AbrirHistorico()
+    {
+        // Ver o historico e livre; o ESTORNO dentro dele e que pede senha de admin.
+        if (!_servico.CaixaAberto)
+        {
+            MessageBox.Show("Abra o caixa para ver o historico de vendas do turno.",
+                "Historico", MessageBoxButtons.OK, MessageBoxIcon.Information);
+            return;
+        }
+        Dialogos.Modal(this, () => new FormHistoricoVendas(_servico));
+        AtualizarStatus();
     }
 
     private void AbrirFechamento()

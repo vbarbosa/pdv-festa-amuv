@@ -57,7 +57,8 @@ CREATE TABLE IF NOT EXISTS vendas (
     recebido_cent INTEGER NOT NULL DEFAULT 0,
     troco_cent    INTEGER NOT NULL DEFAULT 0,
     operador      TEXT NOT NULL DEFAULT '',
-    caixa_id      INTEGER NULL
+    caixa_id      INTEGER NULL,
+    status        INTEGER NOT NULL DEFAULT 0
 );
 
 CREATE TABLE IF NOT EXISTS caixa (
@@ -102,34 +103,35 @@ CREATE TABLE IF NOT EXISTS categorias (
 );";
         cmd.ExecuteNonQuery();
 
-        MigrarColunaCaixaId(conn);
+        MigrarColunasVendas(conn);
     }
 
     /// <summary>
-    /// Migracao suave: bancos criados antes dos turnos nao tem a coluna vendas.caixa_id.
-    /// Adiciona se faltar (SQLite ALTER TABLE ADD COLUMN), preservando o historico, e SO
-    /// ENTAO cria o indice dependente da coluna (por isso o indice nao fica no CREATE em lote:
-    /// num banco antigo a coluna ainda nao existiria quando o indice fosse criado).
+    /// Migracao suave: bancos antigos podem nao ter colunas novas de 'vendas' (caixa_id,
+    /// status). Adiciona as que faltarem (ALTER TABLE ADD COLUMN), preservando o historico,
+    /// e SO ENTAO cria indices dependentes (por isso nao ficam no CREATE em lote: num banco
+    /// antigo a coluna ainda nao existiria quando o indice fosse criado).
     /// </summary>
-    private static void MigrarColunaCaixaId(SqliteConnection conn)
+    private static void MigrarColunasVendas(SqliteConnection conn)
     {
-        bool existe = false;
+        var colunas = new HashSet<string>(StringComparer.OrdinalIgnoreCase);
         using (var check = conn.CreateCommand())
         {
             check.CommandText = "PRAGMA table_info(vendas);";
             using var r = check.ExecuteReader();
-            while (r.Read())
-                if (string.Equals(r.GetString(1), "caixa_id", StringComparison.OrdinalIgnoreCase))
-                    existe = true;
-        }
-        if (!existe)
-        {
-            using var alter = conn.CreateCommand();
-            alter.CommandText = "ALTER TABLE vendas ADD COLUMN caixa_id INTEGER NULL;";
-            alter.ExecuteNonQuery();
+            while (r.Read()) colunas.Add(r.GetString(1));
         }
 
-        // Agora a coluna existe com certeza: cria o indice.
+        void AddColuna(string ddl)
+        {
+            using var alter = conn.CreateCommand();
+            alter.CommandText = ddl;
+            alter.ExecuteNonQuery();
+        }
+        if (!colunas.Contains("caixa_id")) AddColuna("ALTER TABLE vendas ADD COLUMN caixa_id INTEGER NULL;");
+        if (!colunas.Contains("status"))   AddColuna("ALTER TABLE vendas ADD COLUMN status INTEGER NOT NULL DEFAULT 0;");
+
+        // Agora as colunas existem com certeza: cria o indice.
         using var idx = conn.CreateCommand();
         idx.CommandText = "CREATE INDEX IF NOT EXISTS ix_vendas_caixa ON vendas(caixa_id);";
         idx.ExecuteNonQuery();
@@ -181,8 +183,8 @@ ON CONFLICT(chave) DO UPDATE SET valor = excluded.valor;";
         {
             cmd.Transaction = tx;
             cmd.CommandText = @"
-INSERT INTO vendas (data_hora, total_cent, forma, recebido_cent, troco_cent, operador, caixa_id)
-VALUES ($dh, $total, $forma, $rec, $troco, $op, $caixa);
+INSERT INTO vendas (data_hora, total_cent, forma, recebido_cent, troco_cent, operador, caixa_id, status)
+VALUES ($dh, $total, $forma, $rec, $troco, $op, $caixa, $status);
 SELECT last_insert_rowid();";
             cmd.Parameters.AddWithValue("$dh", venda.DataHora.ToString("o"));
             cmd.Parameters.AddWithValue("$total", venda.TotalCentavos);
@@ -191,6 +193,7 @@ SELECT last_insert_rowid();";
             cmd.Parameters.AddWithValue("$troco", venda.TrocoCentavos);
             cmd.Parameters.AddWithValue("$op", venda.Operador);
             cmd.Parameters.AddWithValue("$caixa", (object?)venda.CaixaId ?? DBNull.Value);
+            cmd.Parameters.AddWithValue("$status", (int)venda.Status);
             vendaId = (long)(cmd.ExecuteScalar() ?? 0L);
         }
 
@@ -221,7 +224,7 @@ VALUES ($vid, $pid, $nome, $preco, $qtd);";
 
         using (var cmd = conn.CreateCommand())
         {
-            cmd.CommandText = "SELECT id, data_hora, total_cent, forma, recebido_cent, troco_cent, operador, caixa_id FROM vendas ORDER BY id;";
+            cmd.CommandText = "SELECT id, data_hora, total_cent, forma, recebido_cent, troco_cent, operador, caixa_id, status FROM vendas ORDER BY id;";
             using var r = cmd.ExecuteReader();
             while (r.Read())
             {
@@ -234,7 +237,8 @@ VALUES ($vid, $pid, $nome, $preco, $qtd);";
                     RecebidoCentavos = r.GetInt32(4),
                     TrocoCentavos = r.GetInt32(5),
                     Operador = r.GetString(6),
-                    CaixaId = r.IsDBNull(7) ? null : r.GetInt64(7)
+                    CaixaId = r.IsDBNull(7) ? null : r.GetInt64(7),
+                    Status = (StatusVenda)r.GetInt32(8)
                 };
                 vendas[v.Id] = v;
             }
@@ -261,6 +265,19 @@ VALUES ($vid, $pid, $nome, $preco, $qtd);";
         }
 
         return vendas.Values.ToList();
+    }
+
+    /// <summary>
+    /// ESTORNO: marca a venda como Cancelada (soft delete). NUNCA apaga do banco, para
+    /// manter o rastro de auditoria. Canceladas saem dos totais do caixa e da Leitura Z.
+    /// </summary>
+    public void CancelarVenda(long vendaId)
+    {
+        using var conn = Abrir();
+        using var cmd = conn.CreateCommand();
+        cmd.CommandText = "UPDATE vendas SET status = 1 WHERE id = $id;";
+        cmd.Parameters.AddWithValue("$id", vendaId);
+        cmd.ExecuteNonQuery();
     }
 
     // ---------- CATALOGO ----------
@@ -340,8 +357,8 @@ VALUES ($id, $nome, $preco, $cat, $atalho, $ativo, $comp);";
             {
                 cmd.Transaction = tx;
                 cmd.CommandText = @"
-INSERT INTO vendas (id, data_hora, total_cent, forma, recebido_cent, troco_cent, operador)
-VALUES ($id, $dh, $total, $forma, $rec, $troco, $op);";
+INSERT INTO vendas (id, data_hora, total_cent, forma, recebido_cent, troco_cent, operador, caixa_id, status)
+VALUES ($id, $dh, $total, $forma, $rec, $troco, $op, $caixa, $status);";
                 cmd.Parameters.AddWithValue("$id", v.Id);
                 cmd.Parameters.AddWithValue("$dh", v.DataHora.ToString("o"));
                 cmd.Parameters.AddWithValue("$total", v.TotalCentavos);
@@ -349,6 +366,8 @@ VALUES ($id, $dh, $total, $forma, $rec, $troco, $op);";
                 cmd.Parameters.AddWithValue("$rec", v.RecebidoCentavos);
                 cmd.Parameters.AddWithValue("$troco", v.TrocoCentavos);
                 cmd.Parameters.AddWithValue("$op", v.Operador);
+                cmd.Parameters.AddWithValue("$caixa", (object?)v.CaixaId ?? DBNull.Value);
+                cmd.Parameters.AddWithValue("$status", (int)v.Status);
                 cmd.ExecuteNonQuery();
             }
             foreach (var item in v.Itens)
