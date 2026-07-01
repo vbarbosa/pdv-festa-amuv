@@ -109,10 +109,42 @@ if ([string]::IsNullOrWhiteSpace($IsoPath) -or -not (Test-Path $IsoPath)) {
 
 Info "Criando a VM '$VMName' (Gen 2, ${MemoriaGB}GB RAM, disco ${DiscoGB}GB)..."
 New-Item -ItemType Directory -Force (Split-Path $VhdPath) | Out-Null
-New-VM -Name $VMName -Generation 2 -MemoryStartupBytes ($MemoriaGB * 1GB) `
-    -NewVHDPath $VhdPath -NewVHDSizeBytes ($DiscoGB * 1GB) -SwitchName $SwitchName | Out-Null
+
+# switch de rede: usa o informado se existir; senao tenta o "Default Switch"; se nenhum
+# existir, cria a VM SEM rede (o teste E2E nao precisa de internet).
+$switch = Get-VMSwitch -Name $SwitchName -ErrorAction SilentlyContinue
+if (-not $switch) { $switch = Get-VMSwitch -ErrorAction SilentlyContinue | Select-Object -First 1 }
+
+if ($switch) {
+    New-VM -Name $VMName -Generation 2 -MemoryStartupBytes ($MemoriaGB * 1GB) `
+        -NewVHDPath $VhdPath -NewVHDSizeBytes ($DiscoGB * 1GB) -SwitchName $switch.Name | Out-Null
+    Ok "VM com rede ($($switch.Name))."
+} else {
+    Info "Nenhum switch de rede encontrado; criando a VM SEM rede (nao e necessaria para o teste)."
+    New-VM -Name $VMName -Generation 2 -MemoryStartupBytes ($MemoriaGB * 1GB) `
+        -NewVHDPath $VhdPath -NewVHDSizeBytes ($DiscoGB * 1GB) | Out-Null
+}
+
 Set-VM -Name $VMName -DynamicMemory -MemoryMinimumBytes 2GB -MemoryMaximumBytes ($MemoriaGB * 1GB)
 Set-VMProcessor -VMName $VMName -Count 2
+
+# Gen2 + Windows exige Secure Boot com o template da Microsoft (senao nao boota o instalador).
+Set-VMFirmware -VMName $VMName -EnableSecureBoot On -SecureBootTemplate "MicrosoftWindows"
+
+# Windows 11 exige TPM 2.0: habilita o vTPM (precisa do Key Protector local).
+try {
+    if (-not (Get-HgsGuardian -Name "PDV-Guardian" -ErrorAction SilentlyContinue)) {
+        New-HgsGuardian -Name "PDV-Guardian" -GenerateCertificates | Out-Null
+    }
+    $guardian = Get-HgsGuardian -Name "PDV-Guardian"
+    $kp = New-HgsKeyProtector -Owner $guardian -AllowUntrustedRoot
+    Set-VMKeyProtector -VMName $VMName -KeyProtector $kp.RawData
+    Enable-VMTPM -VMName $VMName
+    Ok "vTPM habilitado (requisito do Windows 11)."
+} catch {
+    Info "Nao consegui habilitar o vTPM ($($_.Exception.Message.Split('.')[0])). Se o instalador do Win11 reclamar de TPM, use o bypass (Shift+F10 no setup)."
+}
+
 Add-VMDvdDrive -VMName $VMName -Path $IsoPath
 # boot pelo DVD para instalar o Windows
 $dvd = Get-VMDvdDrive -VMName $VMName
