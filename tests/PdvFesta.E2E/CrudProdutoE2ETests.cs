@@ -55,13 +55,16 @@ public sealed class CrudProdutoE2ETests : E2ETestBase
         Assert.NotNull(itemConfig);
         var mConfig = itemConfig!.AsMenuItem();
 
-        // Expande e ESPERA os subitens carregarem (o dropdown pode demorar a popular).
+        // Expande e ESPERA o item aparecer. O dropdown pode ser uma janela separada, entao
+        // procuramos tanto nos Items do menu quanto no DESKTOP inteiro (mais robusto).
         FlaUI.Core.AutomationElements.AutomationElement? mProd = null;
-        for (int i = 0; i < 15 && mProd is null; i++)
+        for (int i = 0; i < 20 && mProd is null; i++)
         {
             mConfig.Expand();
-            System.Threading.Thread.Sleep(300);
-            mProd = mConfig.Items.FirstOrDefault(x => x.Name?.StartsWith("Gerenciar Produtos") == true);
+            System.Threading.Thread.Sleep(350);
+            mProd = mConfig.Items.FirstOrDefault(x => x.Name?.StartsWith("Gerenciar Produtos") == true)
+                 ?? automation.GetDesktop().FindFirstDescendant(cf => cf.ByControlType(ControlType.MenuItem)
+                        .And(cf.ByName("Gerenciar Produtos...")));
         }
         Assert.NotNull(mProd);
         mProd!.AsMenuItem().Invoke();

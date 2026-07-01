@@ -162,7 +162,10 @@ Set-Content 'C:\TempPDV\evidencias\test-exit.txt' `$LASTEXITCODE
                 Set-Content "C:\TempPDV\run-e2e.ps1" $runner -Encoding UTF8
                 Remove-Item "C:\TempPDV\evidencias\test-exit.txt" -Force -ErrorAction SilentlyContinue
 
-                schtasks /Create /TN "PDV_E2E" /TR "powershell -NoProfile -ExecutionPolicy Bypass -File C:\TempPDV\run-e2e.ps1" /SC ONCE /ST 00:00 /RL HIGHEST /IT /F | Out-Null
+                # /ST precisa ser uma hora FUTURA (senao o schtasks recusa). Usamos +2min como
+                # placeholder valido; disparamos na hora com /Run (nao esperamos o horario).
+                $st = (Get-Date).AddMinutes(2).ToString("HH:mm")
+                schtasks /Create /TN "PDV_E2E" /TR "powershell -NoProfile -ExecutionPolicy Bypass -File C:\TempPDV\run-e2e.ps1" /SC ONCE /ST $st /RL HIGHEST /IT /F | Out-Null
                 schtasks /Run /TN "PDV_E2E" | Out-Null
 
                 # espera a tarefa terminar (ate 5 min): sinal = test-exit.txt criado.
