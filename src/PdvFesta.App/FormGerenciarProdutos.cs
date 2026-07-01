@@ -66,7 +66,7 @@ public sealed class FormGerenciarProdutos : Form
         _txtPreco.Name = "txtPrecoProduto"; _txtPreco.Dock = DockStyle.Fill;
         _txtPreco.Font = new Font("Segoe UI", 12F); _txtPreco.TextAlign = HorizontalAlignment.Right;
         _txtPreco.Text = "0,00";
-        AddCampo(painel, 2, "Preco R$:", _txtPreco);
+        AddCampo(painel, 2, "Preço R$:", _txtPreco);
 
         _cmbCategoria.Dock = DockStyle.Fill; _cmbCategoria.Font = new Font("Segoe UI", 12F);
         _cmbCategoria.DropDownStyle = ComboBoxStyle.DropDown;
@@ -108,9 +108,10 @@ public sealed class FormGerenciarProdutos : Form
         _grid.BorderStyle = BorderStyle.None;
         _grid.BackgroundColor = Color.White;
         _grid.AutoSizeColumnsMode = DataGridViewAutoSizeColumnsMode.Fill;
+        EstiloGrid.Padronizar(_grid);   // cabecalho legivel (sem cortar texto)
         _grid.Columns.Add("id", "Id");
         _grid.Columns.Add("nome", "Nome");
-        _grid.Columns.Add("preco", "Preco");
+        _grid.Columns.Add("preco", "Preço");
         _grid.Columns.Add("cat", "Categoria");
         _grid.Columns.Add("atalho", "Atalho");
         _grid.Columns.Add("ativo", "Ativo");
@@ -207,7 +208,7 @@ public sealed class FormGerenciarProdutos : Form
         var preco = Dinheiro.ParseCentavos(_txtPreco.Text);
         if (preco is null)
         {
-            AvisoStatus("Preco invalido (ex: 6,00)."); _txtPreco.Focus(); _txtPreco.SelectAll(); return;
+            AvisoStatus("Preço inválido (ex: 6,00)."); _txtPreco.Focus(); _txtPreco.SelectAll(); return;
         }
 
         int atalho = (int)_numAtalho.Value;

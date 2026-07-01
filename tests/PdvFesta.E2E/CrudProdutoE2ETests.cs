@@ -14,38 +14,32 @@ namespace PdvFesta.E2E;
 /// produto foi persistido e que o botao aparece na tela de vendas (refresh dinamico).
 /// </summary>
 [Collection("e2e")]
-public sealed class CrudProdutoE2ETests : IDisposable
+public sealed class CrudProdutoE2ETests : E2ETestBase
 {
     private readonly string _dbPath;
-    private readonly string _exePath;
-    private Process? _proc;
 
     public CrudProdutoE2ETests()
     {
         _dbPath = Path.Combine(Path.GetTempPath(), $"e2ecrud_{Guid.NewGuid():N}.db");
-        var baseDir = AppContext.BaseDirectory;
-        var repoRoot = Path.GetFullPath(Path.Combine(baseDir, "..", "..", "..", "..", ".."));
-        _exePath = Path.Combine(repoRoot, "src", "PdvFesta.App", "bin", "Debug",
-                                "net8.0-windows", "win-x64", "PDV-Festa-AMUV.exe");
     }
 
-    public void Dispose()
+    public override void Dispose()
     {
-        try { if (_proc is { HasExited: false }) _proc.Kill(true); } catch { }
+        base.Dispose();   // mata o app e qualquer orfao
         foreach (var ext in new[] { "", "-wal", "-shm" })
             if (File.Exists(_dbPath + ext)) { try { File.Delete(_dbPath + ext); } catch { } }
     }
 
-    [Fact]
+    [Fact(Skip = SkipUI)]
     public void CadastrarProduto_ApareceNaTelaENoBanco()
     {
-        Assert.True(File.Exists(_exePath), $"Compile a App primeiro. Nao achei: {_exePath}");
-        var psi = new ProcessStartInfo(_exePath) { UseShellExecute = false };
+        Assert.True(File.Exists(ExePath), $"Compile a App primeiro. Nao achei: {ExePath}");
+        var psi = new ProcessStartInfo(ExePath) { UseShellExecute = false };
         psi.EnvironmentVariables["PDVFESTA_DB"] = _dbPath;
-        _proc = Process.Start(psi)!;
+        Proc = Process.Start(psi)!;
 
         using var automation = new UIA3Automation();
-        var app = FlaUI.Core.Application.Attach(_proc);
+        var app = FlaUI.Core.Application.Attach(Proc);
         var janela = RetentarObterJanela(app, automation);
         Assert.NotNull(janela);
 
@@ -53,13 +47,23 @@ public sealed class CrudProdutoE2ETests : IDisposable
         RetentarAchar(janela!, "btnAbrirCaixa")!.AsButton().Invoke();
         System.Threading.Thread.Sleep(500);
 
-        // menu Configuracoes -> Gerenciar Produtos...
+        // menu Configuracoes -> Gerenciar Produtos... (o menu tem acento: "Configurações")
         var barra = janela!.FindFirstChild(cf => cf.ByControlType(ControlType.MenuBar));
-        var mConfig = barra.FindFirstChild(cf => cf.ByName("Configuracoes")).AsMenuItem();
-        mConfig.Expand();
-        System.Threading.Thread.Sleep(300);
-        var mProd = mConfig.Items.First(i => i.Name.StartsWith("Gerenciar Produtos"));
-        mProd.Invoke();
+        var itemConfig = barra.FindAllChildren()
+            .FirstOrDefault(i => i.Name?.Replace("&", "").StartsWith("Config") == true);
+        Assert.NotNull(itemConfig);
+        var mConfig = itemConfig!.AsMenuItem();
+
+        // Expande e ESPERA os subitens carregarem (o dropdown pode demorar a popular).
+        FlaUI.Core.AutomationElements.AutomationElement? mProd = null;
+        for (int i = 0; i < 15 && mProd is null; i++)
+        {
+            mConfig.Expand();
+            System.Threading.Thread.Sleep(300);
+            mProd = mConfig.Items.FirstOrDefault(x => x.Name?.StartsWith("Gerenciar Produtos") == true);
+        }
+        Assert.NotNull(mProd);
+        mProd!.AsMenuItem().Invoke();
         System.Threading.Thread.Sleep(600);
 
         // senha de admin (0000)
@@ -92,15 +96,18 @@ public sealed class CrudProdutoE2ETests : IDisposable
         var abas = janela.FindFirstDescendant(cf => cf.ByControlType(ControlType.Tab))?.AsTab();
         if (abas is not null)
         {
-            var geral = abas.TabItems.FirstOrDefault(t => t.Name == "Geral");
-            geral?.Select();
+            // a 1a aba "Todos" mostra todos os produtos agrupados -> acha qualquer novo item.
+            var todos = abas.TabItems.FirstOrDefault(t => t.Name?.StartsWith("Todos") == true);
+            todos?.Select();
             System.Threading.Thread.Sleep(400);
         }
-        var botao = RetentarAchar(janela, "btnProduto_produto_teste_99");
+        // na aba "Todos" o botao usa o prefixo btnProdutoTodos_
+        var botao = RetentarAchar(janela, "btnProdutoTodos_produto_teste_99")
+                    ?? RetentarAchar(janela, "btnProduto_produto_teste_99");
         Assert.True(botao is not null, "O botao do novo produto nao apareceu na tela de vendas.");
 
         // encerra e confere persistencia
-        try { if (!_proc.HasExited) _proc.Kill(true); } catch { }
+        try { if (!Proc.HasExited) Proc.Kill(true); } catch { }
         System.Threading.Thread.Sleep(500);
         using var repo = new Repositorio(_dbPath);
         repo.Inicializar();

@@ -140,9 +140,58 @@ public static class CupomFormatter
     /// </summary>
     public static List<LinhaCupom> MontarTicket(Venda venda, ConfigCupom cfg, int largura = LarguraPadrao)
     {
-        return cfg.Modo == ModoCupom.FichaConsumo
-            ? MontarFicha(venda, cfg, largura)
-            : MontarReciboCompleto(venda, cfg, largura);
+        return cfg.Modo switch
+        {
+            ModoCupom.FichaConsumo  => MontarFicha(venda, cfg, largura),
+            ModoCupom.ReciboComVales => MontarReciboComVales(venda, cfg, largura),
+            _ => MontarReciboCompleto(venda, cfg, largura)
+        };
+    }
+
+    /// <summary>Divisoria DUPLA (===) que separa o recibo de pagamento das fichas.</summary>
+    public static string DivisoriaDupla(int largura = LarguraPadrao) => new('=', largura);
+
+    /// <summary>Divisoria PONTILHADA (linha de rasgar) entre um vale e o proximo.</summary>
+    public static string DivisoriaPontilhada(int largura = LarguraPadrao) => new('-', largura);
+
+    /// <summary>
+    /// MODELO QUERMESSE: recibo gerencial completo + VALES INDIVIDUAIS destacaveis.
+    /// Desmembra cada item em N fichas de "1x NOME" (uma por unidade fisica), separadas
+    /// por pontilhado, para o cliente rasgar e entregar em barracas/momentos diferentes.
+    /// </summary>
+    private static List<LinhaCupom> MontarReciboComVales(Venda venda, ConfigCupom cfg, int largura)
+    {
+        // 1) Recibo gerencial normal (total, pagamento, troco, itens agrupados).
+        var l = MontarReciboCompleto(venda, cfg, largura);
+
+        // 2) Divisoria DUPLA separando o recibo das fichas de consumo.
+        l.Add(new LinhaCupom(DivisoriaDupla(largura)));
+        l.Add(new LinhaCupom(Centralizar("FICHAS DE CONSUMO", largura)));
+        l.Add(new LinhaCupom(DivisoriaDupla(largura)));
+
+        // 3) Desmembramento: para CADA item de venda (ignorando linhas de desconto de
+        //    combo, que tem ProdutoId vazio), imprime 'Quantidade' vales de "1x NOME".
+        foreach (var item in venda.Itens)
+        {
+            if (string.IsNullOrEmpty(item.ProdutoId)) continue;   // linha de desconto -> nao vira vale
+
+            var qtd = Math.Max(0, item.Quantidade);
+            for (int n = 0; n < qtd; n++)
+            {
+                // nome GRANDE (altura dupla, largura normal => cabe mais que a 2x2), sempre
+                // "1X" (unidade fisica). Wrap em ~28 col porque a largura da fonte e 1x.
+                foreach (var linha in Wrap($"1X {item.Nome.ToUpperInvariant()}", 28))
+                    l.Add(new LinhaCupom(linha, EstiloLinha.Expandida));
+                l.Add(new LinhaCupom(Centralizar("Vale 1 item", largura)));
+                // FOLGA (meio-termo) para dobrar/rasgar: 1 linha em branco de cada lado do
+                // pontilhado. Corte no meio do branco, sem tocar no texto, sem gastar bobina.
+                l.Add(new LinhaCupom(""));
+                l.Add(new LinhaCupom(DivisoriaPontilhada(largura)));   // linha de rasgar
+                l.Add(new LinhaCupom(""));
+            }
+        }
+
+        return l;
     }
 
     private static List<LinhaCupom> MontarReciboCompleto(Venda venda, ConfigCupom cfg, int largura)

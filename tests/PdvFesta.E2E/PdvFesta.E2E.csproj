@@ -21,4 +21,9 @@
     <ProjectReference Include="..\..\src\PdvFesta.App\PdvFesta.App.csproj" />
   </ItemGroup>
 
+  <ItemGroup>
+    <!-- Config do xUnit COPIADA pro output: garante execucao SERIAL (1 app por vez). -->
+    <None Include="xunit.runner.json" CopyToOutputDirectory="PreserveNewest" />
+  </ItemGroup>
+
 </Project>

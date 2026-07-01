@@ -332,7 +332,10 @@ VALUES ($id, $nome, $preco, $cat, $atalho, $ativo, $comp);";
     {
         using var conn = Abrir();
         using var cmd = conn.CreateCommand();
-        cmd.CommandText = "SELECT id, nome, preco_cent, categoria, atalho, ativo, composicao FROM produtos ORDER BY atalho, nome;";
+        // Ordena por nome (previsivel/estavel). A navegacao por teclado usa a POSICAO do
+        // item na categoria, entao a ordem precisa ser deterministica — nao mais por 'atalho'
+        // (campo legado, nao usado apos a navegacao letra+numero).
+        cmd.CommandText = "SELECT id, nome, preco_cent, categoria, atalho, ativo, composicao FROM produtos ORDER BY nome;";
         var produtos = new List<Produto>();
         using var r = cmd.ExecuteReader();
         while (r.Read())

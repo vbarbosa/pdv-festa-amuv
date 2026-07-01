@@ -65,8 +65,8 @@ public sealed class FormPagamento : Form
         for (int i = 0; i < 4; i++) painelFormas.ColumnStyles.Add(new ColumnStyle(SizeType.Percent, 25));
         ConfigBotaoForma(_btnDinheiro, "Dinheiro\n(D)", FormaPagamento.Dinheiro);
         ConfigBotaoForma(_btnPix, "Pix\n(P)", FormaPagamento.Pix);
-        ConfigBotaoForma(_btnDebito, "Debito\n(B)", FormaPagamento.CartaoDebito);
-        ConfigBotaoForma(_btnCredito, "Credito\n(C)", FormaPagamento.CartaoCredito);
+        ConfigBotaoForma(_btnDebito, "Débito\n(B)", FormaPagamento.CartaoDebito);
+        ConfigBotaoForma(_btnCredito, "Crédito\n(C)", FormaPagamento.CartaoCredito);
         painelFormas.Controls.Add(_btnDinheiro, 0, 0);
         painelFormas.Controls.Add(_btnPix, 1, 0);
         painelFormas.Controls.Add(_btnDebito, 2, 0);
@@ -237,8 +237,11 @@ public sealed class FormPagamento : Form
             return;
         }
 
-        // Anti-crash da impressora: a venda JA foi salva; oferece reimprimir.
-        if (!impressaoOk)
+        // Anti-crash da impressora: a venda JA foi salva.
+        // - SEM impressora configurada: o caixa NAO trava. Segue a venda em silencio
+        //   (nada de popup "Repetir/Cancelar" que so faz sentido com impressora de verdade).
+        // - COM impressora que falhou (cabo/papel): oferece Repetir/Ignorar.
+        if (!impressaoOk && _servico.TemImpressora)
             OfferecerReimpressao(venda, impressaoMsg);
 
         DialogResult = DialogResult.OK;

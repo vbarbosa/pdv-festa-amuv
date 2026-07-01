@@ -15,8 +15,11 @@
 #>
 [CmdletBinding()]
 param(
-    [int]$DuracaoSegundos = 32,
-    [string]$Saida = "Treinamento_PDV_FestaJunina.mp4"
+    [int]$DuracaoSegundos = 42,
+    [string]$Saida = "Treinamento_PDV_FestaJunina.mp4",
+    # Trilha sonora de fundo. Default: mp3 real em video/trilha. Se o arquivo nao
+    # existir, cai automaticamente no pad ambiente sintetico (offline).
+    [string]$Musica = "trilha\trilha-festa.mp3"
 )
 
 $ErrorActionPreference = "Stop"
@@ -67,7 +70,9 @@ function New-FiltroScript($fonte, $dur) {
     # cada letreiro: Impact, amarelo com borda azul grossa, centralizado no topo.
     function Letra($texto, $ini, $fim, $y = 70, $size = 52) {
         $ff = if ($fonte) { "fontfile='$fonte':" } else { "" }
-        return "drawtext=${ff}text='$texto':fontcolor=yellow:bordercolor=blue:borderw=6:shadowcolor=black:shadowx=3:shadowy=3:fontsize=${size}:x=(w-text_w)/2:y=${y}:enable='between(t\,$ini\,$fim)'"
+        # escapa ':' no texto (FFmpeg usa ':' como separador de opcoes do drawtext).
+        $t = $texto -replace ':', '\:'
+        return "drawtext=${ff}text='$t':fontcolor=yellow:bordercolor=blue:borderw=6:shadowcolor=black:shadowx=3:shadowy=3:fontsize=${size}:x=(w-text_w)/2:y=${y}:enable='between(t\,$ini\,$fim)'"
     }
     $fadeOut = [math]::Max(1, $dur - 2)
     $ffi = if ($fonte) { "fontfile='$fonte':" } else { "" }
@@ -79,11 +84,11 @@ function New-FiltroScript($fonte, $dur) {
         "setsar=1,fps=15",
         "fade=t=in:st=0:d=1",
         "fade=t=out:st=${fadeOut}:d=2",
-        (Letra "CAIXA LIVRE\!" 4 9 70 60),
-        (Letra "ATALHOS 1 A 9 OU CLIQUE\!" 9 14 70 46),
-        (Letra "TROCO AUTOMATICO\!" 14 19 70 54),
-        (Letra "VENDA CONCLUIDA\!" 19 21 620 54),
-        (Letra "FECHAMENTO BLINDADO\!" 22 32 70 50)
+        (Letra "CAIXA LIVRE\!" 3 8 70 60),
+        (Letra "TECLADO - CATEGORIA + ITEM\!" 8 19 70 44),
+        (Letra "TROCO AUTOMATICO\!" 19 26 70 54),
+        (Letra "VENDA CONCLUIDA\!" 26 29 620 54),
+        (Letra "FECHAMENTO BLINDADO\!" 30 42 70 50)
     ) -join ","
     $body = "$body[body]"
 
@@ -111,28 +116,53 @@ try {
 
     # ABRE O APP ANTES de gravar (banco novo). O app fica em cena a gravacao inteira,
     # entao a gravacao NUNCA mostra o desktop/VS Code.
-    Info "Abrindo o app..."
+    # PDV_DEMO=1 ANTES de abrir o app: o app herda a variavel e finge que imprimiu
+    # (sem popup de "erro na impressora" - e so uma gravacao, sem hardware).
+    Info "Abrindo o app (modo demonstracao)..."
     $env:PDVFESTA_DB = $db
+    $env:PDV_DEMO = "1"
     $appProc = Start-Process $exe -PassThru
     Start-Sleep -Seconds 7   # espera a janela do caixa aparecer
 
-    Info "Iniciando gravacao ($DuracaoSegundos s)..."
-    $recArgs = @("-y","-f","gdigrab","-framerate","15","-t","$DuracaoSegundos","-i","desktop",
+    # Bounds da TELA PRIMARIA (onde o app maximiza). Capturamos essa REGIAO do desktop —
+    # nao a janela (title=) nem o desktop inteiro. Assim pega o app E OS MODAIS (pagamento,
+    # troco, fechamento, senha) que abrem centralizados sobre ele, mas NUNCA a 2a tela.
+    Add-Type -AssemblyName System.Windows.Forms
+    $tela = [System.Windows.Forms.Screen]::PrimaryScreen.Bounds
+    # dimensoes PARES (libx264+yuv420p exige); a tela ja costuma ser par, mas garantimos.
+    $capW = $tela.Width  - ($tela.Width  % 2)
+    $capH = $tela.Height - ($tela.Height % 2)
+    Info "Iniciando gravacao ($DuracaoSegundos s) - REGIAO da tela primaria (${capW}x${capH} @ $($tela.X),$($tela.Y))..."
+
+    $recArgs = @("-y","-f","gdigrab","-framerate","15","-t","$DuracaoSegundos",
+                 "-offset_x","$($tela.X)","-offset_y","$($tela.Y)",
+                 "-video_size","${capW}x${capH}",
+                 "-i","desktop",
                  "-c:v","libx264","-preset","ultrafast","-pix_fmt","yuv420p",$rawFile)
     $rec = Start-Process $ffmpeg -ArgumentList $recArgs -PassThru -WindowStyle Hidden
-    Start-Sleep -Milliseconds 800
+    Start-Sleep -Milliseconds 2000
+    $engatou = -not $rec.HasExited
+    if (-not $engatou) {
+        Info "Captura por regiao nao engatou; usando desktop inteiro como fallback."
+        try { if (-not $rec.HasExited) { $rec.Kill() } } catch {}
+        $recArgs = @("-y","-f","gdigrab","-framerate","15","-t","$DuracaoSegundos","-i","desktop",
+                     "-vf","scale=trunc(iw/2)*2:trunc(ih/2)*2",
+                     "-c:v","libx264","-preset","ultrafast","-pix_fmt","yuv420p",$rawFile)
+        $rec = Start-Process $ffmpeg -ArgumentList $recArgs -PassThru -WindowStyle Hidden
+        Start-Sleep -Milliseconds 800
+    }
 
     Info "Rodando a demonstracao (anexa ao app; sem mouse/teclado fisico)..."
-    $env:PDV_DEMO = "1"
+    # PDV_DEMO=1 ja esta no ambiente (setado antes de abrir o app); o dotnet test herda.
     & $dotnet test (Join-Path $repo "tests\PdvFesta.E2E\PdvFesta.E2E.csproj") -c Debug --no-build --nologo -v q `
         --filter "FullyQualifiedName~DemoMode" | Out-Null
-    $env:PDV_DEMO = $null
 
     Info "Encerrando gravacao e fechando o app..."
     if (-not $rec.HasExited) { $rec.WaitForExit(($DuracaoSegundos + 10) * 1000) | Out-Null }
     if ($rec -and -not $rec.HasExited) { try { $rec.Kill() } catch {} }
     if ($appProc -and -not $appProc.HasExited) { try { $appProc.Kill() } catch {} }
     Get-Process -Name "PDV-Festa-AMUV","ffmpeg" -ErrorAction SilentlyContinue | Stop-Process -Force -ErrorAction SilentlyContinue
+    $env:PDV_DEMO = $null   # nao vaza o modo demo pra sessao do usuario
     if (-not (Test-Path $rawFile)) { throw "A gravacao nao gerou arquivo ($rawFile)." }
 
     Info "Editando (letreiros WordArt + cartoes + transicoes)..."
@@ -143,11 +173,28 @@ try {
 
     New-Item -ItemType Directory -Force $videoDir | Out-Null
     if (Test-Path $saidaMp4) { Remove-Item $saidaMp4 -Force }
+
+    # edita para um MUDO temporario (letreiros + cartoes); a trilha entra no passo seguinte
+    $mudo = Join-Path $env:TEMP "pdv_video_mudo.mp4"
+    if (Test-Path $mudo) { Remove-Item $mudo -Force }
     $edArgs = @("-y","-i",$rawFile,"-filter_complex_script",$filtroFile,"-map","[outv]",
                 "-c:v","libx264","-pix_fmt","yuv420p","-crf","27","-preset","medium",
-                "-movflags","+faststart",$saidaMp4)
+                "-movflags","+faststart",$mudo)
     & $ffmpeg @edArgs
-    if ($LASTEXITCODE -ne 0 -or -not (Test-Path $saidaMp4)) { throw "FFmpeg falhou na edicao final." }
+    if ($LASTEXITCODE -ne 0 -or -not (Test-Path $mudo)) { throw "FFmpeg falhou na edicao final." }
+
+    # ---- trilha sonora: escreve o UNICO arquivo final (mp3 real ou pad sintetico) ----
+    $trilhaPath = if ([System.IO.Path]::IsPathRooted($Musica)) { $Musica } else { Join-Path $videoDir $Musica }
+    $trilhaArgs = @{ Entrada = $mudo; Saida = $saidaMp4 }
+    if (Test-Path $trilhaPath) {
+        Info "Adicionando trilha sonora: $([System.IO.Path]::GetFileName($trilhaPath))"
+        $trilhaArgs.Musica = $trilhaPath
+    } else {
+        Info "Trilha nao encontrada em $trilhaPath -> usando pad ambiente sintetico."
+    }
+    & (Join-Path $videoDir "Adicionar-TrilhaSonora.ps1") @trilhaArgs
+    if ($LASTEXITCODE -ne 0 -or -not (Test-Path $saidaMp4)) { throw "Falha ao adicionar a trilha sonora." }
+    Remove-Item $mudo -Force -ErrorAction SilentlyContinue
 
     $mb = [math]::Round((Get-Item $saidaMp4).Length / 1MB, 2)
     Info "PRONTO! Video gerado: $saidaMp4 ($mb MB)"

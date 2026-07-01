@@ -24,4 +24,8 @@ public static class Dinheiro
 
     /// <summary>Formata centavos como "R$ 12,50".</summary>
     public static string Formatar(int centavos) => CupomFormatter.Moeda(centavos);
+
+    /// <summary>Formata centavos como "12,50" (sem "R$"), para preencher campos de entrada.</summary>
+    public static string FormatarSemSimbolo(int centavos) =>
+        (centavos / 100m).ToString("0.00", CultureInfo.GetCultureInfo("pt-BR"));
 }

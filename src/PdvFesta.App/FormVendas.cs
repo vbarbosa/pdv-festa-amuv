@@ -27,16 +27,45 @@ public sealed class FormVendas : Form
 
     private List<Produto> _produtos = new();
 
+    // --- navegacao 100% por teclado: LETRA da categoria -> NUMERO do item -> Enter ---
+    // Toda categoria ganha uma letra (a inicial; se colidir, a proxima livre). Cada aba
+    // guarda seus produtos em ordem, para "C 2" destacar o 2o item de Comidas. Enter adiciona.
+    private readonly Dictionary<char, string> _letraCategoria = new();     // 'C' -> "Comidas"
+    private readonly Dictionary<string, List<Produto>> _itensPorCategoria = new();
+    private readonly Dictionary<string, TabPage> _abaPorCategoria = new();
+    private string? _catSelecionada;      // categoria em modo de selecao (null = fora do modo)
+    private int _itemDestacado = -1;      // indice do item destacado dentro da categoria
+    private ToolStripStatusLabel _stModo = new();
+
     public FormVendas(Servico servico)
     {
         _servico = servico;
         Name = "FormVendas";
         Text = "PDV Festa Junina - Terminal Caixa 01";
         Icon = Marca.Icone();
-        WindowState = FormWindowState.Maximized;
         KeyPreview = true;
         BackColor = Color.White;
         Font = new Font("Segoe UI", 11F);
+
+        // MODO DEMO (gravacao do video): abre MAXIMIZADO forcado na TELA PRIMARIA. Assim a
+        // captura por titulo pega a janela cheia numa tela so — nunca esticada nas 2 telas.
+        // (Posiciona na primaria ANTES de maximizar; senao o Windows maximiza onde abriu.)
+        if (Environment.GetEnvironmentVariable("PDV_DEMO") == "1")
+        {
+            StartPosition = FormStartPosition.Manual;
+            var primaria = Screen.PrimaryScreen!.WorkingArea;
+            Location = new Point(primaria.X, primaria.Y);
+            Size = new Size(primaria.Width, primaria.Height);
+            Shown += (_, _) =>
+            {
+                Location = new Point(primaria.X, primaria.Y);   // garante ancora na primaria
+                WindowState = FormWindowState.Maximized;        // maximiza NELA
+            };
+        }
+        else
+        {
+            WindowState = FormWindowState.Maximized;
+        }
         MinimumSize = new Size(1000, 640);
 
         MontarLayout();
@@ -119,21 +148,22 @@ public sealed class FormVendas : Form
 
         var mArquivo = new ToolStripMenuItem("&Arquivo");
         mArquivo.DropDownItems.Add("Abrir Caixa...", null, (s, e) => AbrirCaixaMenu());
-        mArquivo.DropDownItems.Add(Item("Historico de Vendas", Keys.F3, (s, e) => AbrirHistorico()));
+        mArquivo.DropDownItems.Add("Trocar Operador...", null, (s, e) => AbrirTrocaOperador());
+        mArquivo.DropDownItems.Add(Item("Histórico de Vendas", Keys.F3, (s, e) => AbrirHistorico()));
         mArquivo.DropDownItems.Add(Item("Fechamento de Caixa", Keys.F9, (s, e) => AbrirFechamento()));
         mArquivo.DropDownItems.Add(new ToolStripSeparator());
         mArquivo.DropDownItems.Add("Sair", null, (s, e) => Close());
 
-        var mConfig = new ToolStripMenuItem("&Configuracoes");
+        var mConfig = new ToolStripMenuItem("&Configurações");
         mConfig.DropDownItems.Add("Gerenciar Produtos...", null, (s, e) => AbrirGerenciarProdutos());
         mConfig.DropDownItems.Add("Gerenciar Categorias...", null, (s, e) => AbrirGerenciarCategorias());
-        mConfig.DropDownItems.Add("Gerenciar Promocoes / Combos...", null, (s, e) => AbrirGerenciarPromocoes());
+        mConfig.DropDownItems.Add("Gerenciar Promoções / Combos...", null, (s, e) => AbrirGerenciarPromocoes());
         mConfig.DropDownItems.Add(Item("Gerenciar Impressora", Keys.F12, (s, e) => AbrirConfigImpressora()));
         mConfig.DropDownItems.Add("Layout do Cupom...", null, (s, e) => AbrirLayoutCupom());
         mConfig.DropDownItems.Add("Customizar Atalhos...", null, (s, e) => AbrirCustomizarAtalhos());
 
         var mFerr = new ToolStripMenuItem("Ferramen&tas");
-        mFerr.DropDownItems.Add(Item("Backup / Restauracao", Keys.F8, (s, e) => AbrirBackup()));
+        mFerr.DropDownItems.Add(Item("Backup / Restauração", Keys.F8, (s, e) => AbrirBackup()));
         mFerr.DropDownItems.Add(new ToolStripSeparator());
         mFerr.DropDownItems.Add("Sangria (retirada)...", null, (s, e) => AbrirMovimento(TipoMovimento.Sangria));
         mFerr.DropDownItems.Add("Suprimento (entrada)...", null, (s, e) => AbrirMovimento(TipoMovimento.Suprimento));
@@ -155,14 +185,19 @@ public sealed class FormVendas : Form
     private StatusStrip CriarStatusStrip()
     {
         var st = new StatusStrip { SizingGrip = false, Font = new Font("Segoe UI", 10F) };
-        var atalhos = new ToolStripStatusLabel("[1-9] Produto   [F2] Pagar   [Esc] Limpar   [F9] Fechamento   [F12] Impressora")
+        var atalhos = new ToolStripStatusLabel("[Letra] Categoria + [Nº] Item + [Enter] Adiciona   |   [F2] Pagar   [Esc] Limpa   [F9] Fechamento   [F12] Impressora")
         { Spring = true, TextAlign = ContentAlignment.MiddleLeft };
 
         _stBd.Text = "BD: --";
         _stImpressora.Text = "Impressora: --";
         _stCaixa.Text = "Caixa: --";
+        _stModo.Text = "";
+        _stModo.ForeColor = Marca.Vermelho;
+        _stModo.Font = new Font("Segoe UI", 10F, FontStyle.Bold);
 
         st.Items.Add(atalhos);
+        st.Items.Add(new ToolStripStatusLabel("|"));
+        st.Items.Add(_stModo);
         st.Items.Add(new ToolStripStatusLabel("|"));
         st.Items.Add(_stCaixa);
         st.Items.Add(new ToolStripStatusLabel("|"));
@@ -292,6 +327,9 @@ public sealed class FormVendas : Form
         foreach (var c in ativas) if (comProduto.Contains(c)) ordem.Add(c);
         foreach (var c in comProduto) if (!ordem.Contains(c) && !inativas.Contains(c)) ordem.Add(c);
 
+        // (re)constroi os mapas de navegacao por teclado: letra, itens e aba de cada categoria.
+        ConstruirMapaTeclado(ordem);
+
         // 1a aba "Todos": TODOS os produtos agrupados por categoria numa tela so (com scroll).
         if (_produtos.Count > 0)
             _abas.TabPages.Add(CriarAbaTodos(ordem));
@@ -299,15 +337,18 @@ public sealed class FormVendas : Form
         // abas por categoria
         foreach (var cat in ordem)
         {
-            var page = new TabPage(cat);
+            var letra = _letraCategoria.FirstOrDefault(kv => kv.Value == cat).Key;
+            // titulo da aba mostra a letra do atalho: "Comidas (C)"
+            var page = new TabPage(letra != '\0' ? $"{cat} ({letra})" : cat) { Tag = cat };
             var fluxo = new FlowLayoutPanel
             {
                 Dock = DockStyle.Fill, AutoScroll = true, Padding = new Padding(10),
                 BackColor = Color.White
             };
-            foreach (var p in _produtos.Where(x => x.Categoria == cat))
+            foreach (var p in _itensPorCategoria[cat])
                 fluxo.Controls.Add(CriarBotaoProduto(p));
             page.Controls.Add(fluxo);
+            _abaPorCategoria[cat] = page;
             _abas.TabPages.Add(page);
         }
     }
@@ -351,6 +392,108 @@ public sealed class FormVendas : Form
         return page;
     }
 
+    /// <summary>
+    /// Monta os mapas da navegacao por teclado: para cada categoria (na ordem das abas)
+    /// atribui uma LETRA (a inicial livre) e guarda a lista ordenada de itens. Assim
+    /// "C 2 Enter" resolve deterministicamente o 2o produto de Comidas.
+    /// </summary>
+    private void ConstruirMapaTeclado(List<string> ordem)
+    {
+        _letraCategoria.Clear();
+        _itensPorCategoria.Clear();
+        _abaPorCategoria.Clear();
+
+        foreach (var cat in ordem)
+        {
+            _itensPorCategoria[cat] = _produtos.Where(x => x.Categoria == cat).ToList();
+
+            // letra = 1a letra livre do nome; se todas ocupadas, cai pra qualquer A-Z livre.
+            char letra = '\0';
+            foreach (var ch in cat.ToUpperInvariant())
+                if (char.IsLetter(ch) && !_letraCategoria.ContainsKey(ch)) { letra = ch; break; }
+            if (letra == '\0')
+                for (char c = 'A'; c <= 'Z'; c++)
+                    if (!_letraCategoria.ContainsKey(c)) { letra = c; break; }
+            if (letra != '\0') _letraCategoria[letra] = cat;
+        }
+    }
+
+    /// <summary>Entra no modo de selecao de uma categoria: troca a aba e destaca o 1o item.</summary>
+    private void EntrarModoCategoria(string cat)
+    {
+        if (!_abaPorCategoria.TryGetValue(cat, out var aba)) return;
+        _abas.SelectedTab = aba;
+        _catSelecionada = cat;
+        _itemDestacado = _itensPorCategoria[cat].Count > 0 ? 0 : -1;
+        AtualizarDestaque();
+    }
+
+    /// <summary>Destaca o N-esimo item (0-based) da categoria ativa. Fora do range = ignora.</summary>
+    private void DestacarItem(int indice)
+    {
+        if (_catSelecionada is null) return;
+        var itens = _itensPorCategoria[_catSelecionada];
+        if (indice < 0 || indice >= itens.Count) return;
+        _itemDestacado = indice;
+        AtualizarDestaque();
+    }
+
+    /// <summary>Adiciona o item destacado ao carrinho e sai do modo de selecao.</summary>
+    private bool ConfirmarItemDestacado()
+    {
+        if (_catSelecionada is null || _itemDestacado < 0) return false;
+        var itens = _itensPorCategoria[_catSelecionada];
+        if (_itemDestacado >= itens.Count) return false;
+        AdicionarProduto(itens[_itemDestacado]);
+        SairModoSelecao();
+        return true;
+    }
+
+    private void SairModoSelecao()
+    {
+        _catSelecionada = null;
+        _itemDestacado = -1;
+        AtualizarDestaque();
+    }
+
+    /// <summary>Pinta a borda do item destacado e atualiza a dica de modo no rodape.</summary>
+    private void AtualizarDestaque()
+    {
+        // limpa qualquer destaque anterior em todas as abas
+        foreach (var aba in _abaPorCategoria.Values)
+            foreach (var btn in ProdutosDaAba(aba))
+                btn.FlatAppearance.BorderColor = Color.FromArgb(210, 210, 210);
+
+        if (_catSelecionada is null)
+        {
+            _stModo.Text = "";
+            return;
+        }
+
+        var letra = _letraCategoria.FirstOrDefault(kv => kv.Value == _catSelecionada).Key;
+        if (_itemDestacado >= 0 && _abaPorCategoria.TryGetValue(_catSelecionada, out var abaSel))
+        {
+            var botoes = ProdutosDaAba(abaSel);
+            if (_itemDestacado < botoes.Count)
+            {
+                var alvo = botoes[_itemDestacado];
+                alvo.FlatAppearance.BorderColor = Marca.Vermelho;
+                var nome = _itensPorCategoria[_catSelecionada][_itemDestacado].Nome;
+                _stModo.Text = $"► {_catSelecionada} ({letra}) {_itemDestacado + 1}: {nome} — Enter adiciona";
+                return;
+            }
+        }
+        _stModo.Text = $"► {_catSelecionada} ({letra}) — digite o Nº do item";
+    }
+
+    /// <summary>Botoes de produto de uma aba de categoria, na ordem em que aparecem.</summary>
+    private static List<Button> ProdutosDaAba(TabPage aba)
+    {
+        var fluxo = aba.Controls.OfType<FlowLayoutPanel>().FirstOrDefault();
+        if (fluxo is null) return new();
+        return fluxo.Controls.OfType<Button>().ToList();
+    }
+
     private Button CriarBotaoProduto(Produto p, string prefixoNome = "btnProduto_")
     {
         var btn = new Button
@@ -365,15 +508,20 @@ public sealed class FormVendas : Form
         btn.FlatAppearance.BorderColor = Color.FromArgb(210, 210, 210);
         btn.Click += (s, e) => AdicionarProduto(p);
 
-        // atalho no canto superior esquerdo (badge)
-        if (p.Atalho is >= 1 and <= 9)
+        // badge com o NUMERO do item dentro da sua categoria (1..N). TODO item ganha um,
+        // entao a sequencia "Letra da categoria + Numero" opera qualquer produto pelo teclado.
+        int idx = _itensPorCategoria.TryGetValue(p.Categoria, out var lst) ? lst.IndexOf(p) : -1;
+        if (idx >= 0)
         {
+            var letra = _letraCategoria.FirstOrDefault(kv => kv.Value == p.Categoria).Key;
             var badge = new Label
             {
-                Text = p.Atalho.ToString(), AutoSize = false, Size = new Size(24, 20),
+                // "C2" = categoria Comidas, item 2. So o numero se nao houver letra.
+                Text = letra != '\0' ? $"{letra}{idx + 1}" : (idx + 1).ToString(),
+                AutoSize = false, Size = new Size(30, 20),
                 Location = new Point(4, 4), TextAlign = ContentAlignment.MiddleCenter,
                 BackColor = Marca.Vermelho, ForeColor = Color.White,
-                Font = new Font("Segoe UI", 10F, FontStyle.Bold)
+                Font = new Font("Segoe UI", 9F, FontStyle.Bold)
             };
             badge.Click += (s, e) => AdicionarProduto(p);
             btn.Controls.Add(badge);
@@ -425,12 +573,19 @@ public sealed class FormVendas : Form
 
     private void RemoverSelecionado()
     {
-        if (_grid.CurrentRow?.Tag is string id)
-        {
-            _servico.Carrinho.Remover(id);
-            _servico.AplicarPromocoes();   // reavalia: pode sumir a linha de desconto
-            AtualizarCarrinho();
-        }
+        if (_servico.Carrinho.Itens.Count == 0) return;
+
+        // linha selecionada (se for um item de verdade, tem o ProdutoId no Tag).
+        var id = _grid.CurrentRow?.Tag as string;
+
+        // A prova de erro: se nada de valido esta selecionado (ex: foco fora do grid, ou
+        // linha de desconto), remove o ULTIMO item adicionado — o caso tipico de correcao.
+        if (id is null)
+            id = _servico.Carrinho.Itens[^1].ProdutoId;
+
+        _servico.Carrinho.Remover(id);
+        _servico.AplicarPromocoes();   // reavalia: pode sumir a linha de desconto
+        AtualizarCarrinho();
     }
 
     private void LimparCarrinho()
@@ -444,24 +599,53 @@ public sealed class FormVendas : Form
 
     private void FormVendas_KeyDown(object? sender, KeyEventArgs e)
     {
+        // ignora combinacoes com Ctrl/Alt (sao dos menus) para nao roubar atalhos do sistema.
+        if (e.Control || e.Alt) return;
+
+        // 1) LETRA de categoria -> entra no modo de selecao daquela aba (destaca 1o item).
+        if (e.KeyCode is >= Keys.A and <= Keys.Z)
+        {
+            char letra = (char)('A' + (e.KeyCode - Keys.A));
+            if (_letraCategoria.TryGetValue(letra, out var cat))
+            {
+                EntrarModoCategoria(cat);
+                e.Handled = true; e.SuppressKeyPress = true;
+                return;
+            }
+            return;   // letra sem categoria: deixa passar (nao atrapalha)
+        }
+
         switch (e.KeyCode)
         {
+            // 2) NUMERO: SO tem efeito DENTRO do modo de selecao (destaca o N-esimo item da
+            //    categoria ativa). Fora do modo, numero e ignorado — assim NAO existe o
+            //    atalho global 1-9 competindo com a sequencia, e nunca adiciona item errado.
             case >= Keys.D1 and <= Keys.D9:
-                AdicionarPorAtalho(e.KeyCode - Keys.D0); e.Handled = true; break;
+                if (_catSelecionada is not null) { DestacarItem(e.KeyCode - Keys.D0 - 1); e.Handled = true; }
+                break;
             case >= Keys.NumPad1 and <= Keys.NumPad9:
-                AdicionarPorAtalho(e.KeyCode - Keys.NumPad0); e.Handled = true; break;
-            case Keys.F2:
-            case Keys.Enter:
-                AbrirPagamento(); e.Handled = true; break;
-            case Keys.Escape:
-                LimparCarrinho(); e.Handled = true; break;
-        }
-    }
+                if (_catSelecionada is not null) { DestacarItem(e.KeyCode - Keys.NumPad0 - 1); e.Handled = true; }
+                break;
 
-    private void AdicionarPorAtalho(int numero)
-    {
-        var p = _produtos.FirstOrDefault(x => x.Atalho == numero);
-        if (p is not null) AdicionarProduto(p);
+            // 3) ENTER: no modo, adiciona o item destacado; fora do modo, vai pagar.
+            case Keys.Enter:
+                if (!ConfirmarItemDestacado()) AbrirPagamento();
+                e.Handled = true; break;
+            case Keys.F2:
+                AbrirPagamento(); e.Handled = true; break;
+
+            // 4) ESC: sai do modo de selecao; se ja estava fora, limpa o carrinho.
+            case Keys.Escape:
+                if (_catSelecionada is not null) SairModoSelecao();
+                else LimparCarrinho();
+                e.Handled = true; break;
+
+            // 5) DELETE/BACKSPACE: remove item do carrinho de QUALQUER lugar (correcao de
+            //    pedido a prova de erro — nao exige que o foco esteja no grid).
+            case Keys.Delete:
+            case Keys.Back:
+                RemoverSelecionado(); e.Handled = true; break;
+        }
     }
 
     // ======================= TELAS =======================
@@ -509,11 +693,25 @@ public sealed class FormVendas : Form
         // Ver o historico e livre; o ESTORNO dentro dele e que pede senha de admin.
         if (!_servico.CaixaAberto)
         {
-            MessageBox.Show("Abra o caixa para ver o historico de vendas do turno.",
-                "Historico", MessageBoxButtons.OK, MessageBoxIcon.Information);
+            MessageBox.Show("Abra o caixa para ver o histórico de vendas do turno.",
+                "Histórico", MessageBoxButtons.OK, MessageBoxIcon.Information);
             return;
         }
         Dialogos.Modal(this, () => new FormHistoricoVendas(_servico));
+        AtualizarStatus();
+    }
+
+    private void AbrirTrocaOperador()
+    {
+        if (!_servico.CaixaAberto)
+        {
+            MessageBox.Show("Abra o caixa antes de trocar de operador.",
+                "Troca de Operador", MessageBoxButtons.OK, MessageBoxIcon.Information);
+            return;
+        }
+        // critico (fecha turno + mexe em dinheiro/gaveta): pede senha de admin.
+        if (!Dialogos.LiberarAdmin(this, _servico)) return;
+        Dialogos.Modal(this, () => new FormTrocaOperador(_servico));
         AtualizarStatus();
     }
 
@@ -531,36 +729,32 @@ public sealed class FormVendas : Form
         RecarregarProdutos();   // refresh dinamico: botoes/precos atualizados na hora
     }
 
+    // Configuracoes NAO-perigosas (nao mexem em dinheiro/vendas): liberadas sem senha.
     private void AbrirGerenciarCategorias()
     {
-        if (!Dialogos.LiberarAdmin(this, _servico)) return;
         Dialogos.Modal(this, () => new FormCategorias(_servico));
         RecarregarProdutos();   // abas reordenadas/ocultadas na hora
     }
 
     private void AbrirGerenciarPromocoes()
     {
-        if (!Dialogos.LiberarAdmin(this, _servico)) return;
         Dialogos.Modal(this, () => new FormPromocoes(_servico));
         _servico.RecarregarPromocoes();   // novas regras valem no proximo item
     }
 
     private void AbrirConfigImpressora()
     {
-        if (!Dialogos.LiberarAdmin(this, _servico)) return;
         Dialogos.Modal(this, () => new FormPrinterConfig(_servico));
         AtualizarStatus();
     }
 
     private void AbrirLayoutCupom()
     {
-        if (!Dialogos.LiberarAdmin(this, _servico)) return;
         Dialogos.Modal(this, () => new FormLayoutCupom(_servico));
     }
 
     private void AbrirCustomizarAtalhos()
     {
-        if (!Dialogos.LiberarAdmin(this, _servico)) return;
         Dialogos.Modal(this, () => new FormCustomizarAtalhos(_servico));
         RecarregarProdutos();   // badges de atalho atualizadas
     }

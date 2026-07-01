@@ -37,7 +37,7 @@ public sealed class FormPromocoes : Form
     public FormPromocoes(Servico servico)
     {
         _servico = servico;
-        Text = "Gerenciar Promocoes / Combos";
+        Text = "Gerenciar Promoções / Combos";
         Name = "FormPromocoes";
         Icon = Marca.Icone();
         StartPosition = FormStartPosition.CenterParent;
@@ -66,13 +66,13 @@ public sealed class FormPromocoes : Form
         void Linha(string rot, Control c) { painel.Controls.Add(new Label { Text = rot, Dock = DockStyle.Fill, TextAlign = ContentAlignment.MiddleLeft }, 0, row); painel.Controls.Add(c, 1, row); row++; }
         void Full(Control c) { painel.Controls.Add(c, 0, row); painel.SetColumnSpan(c, 2); row++; }
 
-        Full(new Label { Text = "CADASTRO DE PROMOCAO", Font = new Font("Segoe UI", 13F, FontStyle.Bold), Height = 32, Dock = DockStyle.Fill });
+        Full(new Label { Text = "CADASTRO DE PROMOÇÃO", Font = new Font("Segoe UI", 13F, FontStyle.Bold), Height = 32, Dock = DockStyle.Fill });
 
         _txtDesc.Dock = DockStyle.Fill;
-        Linha("Descricao:", _txtDesc);
+        Linha("Descrição:", _txtDesc);
 
         _cmbTipo.Dock = DockStyle.Fill; _cmbTipo.DropDownStyle = ComboBoxStyle.DropDownList;
-        _cmbTipo.Items.AddRange(new object[] { "Preco Especial (1 item)", "Combo (varios itens)" });
+        _cmbTipo.Items.AddRange(new object[] { "Preço Especial (1 item)", "Combo (vários itens)" });
         _cmbTipo.SelectedIndex = 0;
         Linha("Tipo:", _cmbTipo);
 
@@ -82,14 +82,14 @@ public sealed class FormPromocoes : Form
         _chkAtivo.Text = "Ativa (liga/desliga na hora)"; _chkAtivo.Dock = DockStyle.Fill; _chkAtivo.Checked = true;
         Full(_chkAtivo);
 
-        _chkHorario.Text = "Restringir por horario"; _chkHorario.Dock = DockStyle.Fill;
+        _chkHorario.Text = "Restringir por horário"; _chkHorario.Dock = DockStyle.Fill;
         _chkHorario.CheckedChanged += (s, e) => AtualizarEstadoHorario();
         Full(_chkHorario);
 
         _dtpInicio.Format = DateTimePickerFormat.Time; _dtpInicio.ShowUpDown = true; _dtpInicio.Dock = DockStyle.Fill;
         _dtpFim.Format = DateTimePickerFormat.Time; _dtpFim.ShowUpDown = true; _dtpFim.Dock = DockStyle.Fill;
         Linha("Das (hora):", _dtpInicio);
-        Linha("Ate (hora):", _dtpFim);
+        Linha("Até (hora):", _dtpFim);
 
         Full(new Label { Text = "ITENS EXIGIDOS (produto x qtd):", Font = new Font("Segoe UI", 10F, FontStyle.Bold), Height = 26, Dock = DockStyle.Fill });
         _cmbProduto.Dock = DockStyle.Fill; _cmbProduto.DropDownStyle = ComboBoxStyle.DropDownList;
@@ -118,11 +118,12 @@ public sealed class FormPromocoes : Form
         _grid.SelectionMode = DataGridViewSelectionMode.FullRowSelect; _grid.RowHeadersVisible = false;
         _grid.BorderStyle = BorderStyle.None; _grid.BackgroundColor = Color.White;
         _grid.AutoSizeColumnsMode = DataGridViewAutoSizeColumnsMode.Fill;
+        EstiloGrid.Padronizar(_grid);   // cabecalho legivel (sem cortar texto)
         _grid.Columns.Add("id", "Id"); _grid.Columns["id"]!.Visible = false;
-        _grid.Columns.Add("desc", "Promocao");
+        _grid.Columns.Add("desc", "Promoção");
         _grid.Columns.Add("tipo", "Tipo");
         _grid.Columns.Add("desc2", "Desconto");
-        _grid.Columns.Add("hora", "Horario");
+        _grid.Columns.Add("hora", "Horário");
         _grid.Columns.Add("ativo", "Ativa");
         _grid.SelectionChanged += (s, e) => SelecionarLinha();
 
@@ -249,7 +250,7 @@ public sealed class FormPromocoes : Form
 
     private void Inativar()
     {
-        if (_editandoId <= 0) { Aviso("Selecione uma promocao para inativar."); return; }
+        if (_editandoId <= 0) { Aviso("Selecione uma promoção para inativar."); return; }
         _servico.InativarPromocao(_editandoId);
         CarregarGrid(); Novo();
         _lblStatus.ForeColor = Color.FromArgb(180, 80, 0);

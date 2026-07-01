@@ -81,6 +81,7 @@ public sealed class FormCategorias : Form
         _grid.MultiSelect = false; _grid.SelectionMode = DataGridViewSelectionMode.FullRowSelect;
         _grid.RowHeadersVisible = false; _grid.BorderStyle = BorderStyle.None; _grid.BackgroundColor = Color.White;
         _grid.AutoSizeColumnsMode = DataGridViewAutoSizeColumnsMode.Fill;
+        EstiloGrid.Padronizar(_grid);   // cabecalho legivel (sem cortar texto)
         _grid.Columns.Add("nome", "Categoria");
         _grid.Columns.Add("ordem", "Ordem");
         _grid.Columns.Add("ativo", "Ativa");

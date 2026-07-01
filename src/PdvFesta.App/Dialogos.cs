@@ -23,6 +23,7 @@ public static class Dialogos
         try
         {
             using var f = criar();
+            AjusteLayout.Blindar(f);       // anti-corte: nenhuma tela abre com botoes escondidos
             return f.ShowDialog(owner);
         }
         finally
@@ -38,6 +39,7 @@ public static class Dialogos
     public static bool LiberarAdmin(IWin32Window owner, Servico servico)
     {
         using var f = new FormSenhaAdmin(servico);
+        AjusteLayout.Blindar(f);
         return f.ShowDialog(owner) == DialogResult.OK;
     }
 }

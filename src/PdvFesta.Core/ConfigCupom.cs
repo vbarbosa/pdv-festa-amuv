@@ -9,7 +9,14 @@ public enum ModoCupom
     /// Ficha de consumo (economico): so quantidade + nome em fonte EXPANDIDA,
     /// sem valores. Leitura instantanea na barraca; gasta menos bobina.
     /// </summary>
-    FichaConsumo = 1
+    FichaConsumo = 1,
+    /// <summary>
+    /// Recibo gerencial + VALES INDIVIDUAIS destacaveis (modelo quermesse): imprime o
+    /// resumo da compra (total/troco/itens) e, abaixo, DESMEMBRA cada item em N fichas
+    /// de "1x NOME" (uma por unidade fisica), separadas por pontilhado para rasgar e
+    /// entregar nas barracas. Ex: 3x Cachorro -> 3 vales de "1x CACHORRO".
+    /// </summary>
+    ReciboComVales = 2
 }
 
 /// <summary>Estilo grafico de uma linha do cupom (a camada ESC/POS traduz em bytes).</summary>
@@ -62,7 +69,12 @@ public sealed class ConfigCupom
         {
             Evento = repo.LerConfig(KEvento, tituloPadrao),
             Subtitulo = repo.LerConfig(KSubtitulo, ""),
-            Modo = repo.LerConfig(KModo, "0") == "1" ? ModoCupom.FichaConsumo : ModoCupom.Completo,
+            Modo = repo.LerConfig(KModo, "0") switch
+            {
+                "1" => ModoCupom.FichaConsumo,
+                "2" => ModoCupom.ReciboComVales,
+                _ => ModoCupom.Completo
+            },
             SepararPorItem = repo.LerConfig(KSeparar, "0") == "1",
             Rodape = repo.LerConfig(KRodape, "Obrigado! Bom Arraia!")
         };
@@ -73,7 +85,7 @@ public sealed class ConfigCupom
     {
         repo.SalvarConfig(KEvento, Evento);
         repo.SalvarConfig(KSubtitulo, Subtitulo);
-        repo.SalvarConfig(KModo, Modo == ModoCupom.FichaConsumo ? "1" : "0");
+        repo.SalvarConfig(KModo, ((int)Modo).ToString());
         repo.SalvarConfig(KSeparar, SepararPorItem ? "1" : "0");
         repo.SalvarConfig(KRodape, Rodape);
     }

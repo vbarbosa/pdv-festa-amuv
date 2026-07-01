@@ -3,6 +3,42 @@
 Formato baseado em [Keep a Changelog](https://keepachangelog.com/pt-BR/).
 Versionamento [SemVer](https://semver.org/lang/pt-BR/).
 
+## [2.3.0] — Fichas de vales, navegação por teclado e robustez de impressão
+
+### Adicionado
+- **Fichas de consumo destacáveis** (modelo quermesse): novo modo de cupom
+  `Recibo + Vales destacáveis` desmembra cada item em N vales de "1X NOME" (um por unidade),
+  separados por pontilhado para rasgar e entregar nas barracas. Selecionável no Layout do
+  Cupom. Ver ADR-0015.
+- **Navegação 100% por teclado**: `Letra da categoria → Número do item → Enter`. Todo item
+  ganha badge/atalho automático pela posição; produto/categoria novos também. Ver ADR-0016.
+- **Reimprimir Nota** no Histórico de Vendas (para vendas feitas antes de a impressora estar
+  pronta).
+- **Troca de operador com batimento de caixa opcional**: passa o bastão entre voluntários
+  sem parar a venda; na troca, pode-se conferir a gaveta (esperado × contado → sobra/falta).
+  Ver ADR-0019.
+- **Impressão sem acento**: o cupom sai em ASCII limpo em qualquer térmica; a tela mantém
+  acentuação. Ver ADR-0017.
+- **Impressora plug-and-play**: auto-detecção ao abrir (USB tem prioridade sobre Bluetooth),
+  escolha da fila online, e preparo anti-embola (religa offline + limpa jobs presos) antes de
+  cada cupom. Ver ADR-0017.
+- **Anti-corte de layout** (`AjusteLayout`) + cabeçalhos de grid padronizados (`EstiloGrid`):
+  nenhuma tela abre com botões/texto cortados. Ver ADR-0018.
+
+### Alterado
+- **Senha de admin só em ações críticas** (caixa, fechamento, sangria/suprimento, produtos,
+  backup, estorno). Categorias, promoções, impressora, layout e atalhos ficaram liberados.
+- **Acentuação PT-BR** em toda a UI visível (menus, títulos, mensagens, colunas).
+- **Ordenação de produtos por nome** (previsível), aposentando o campo `atalho` legado.
+- **Vídeo de treinamento**: captura só a janela do app (uma tela), maximizada na primária,
+  com trilha real e sem popup de impressora no modo demo. Ver ADR-0018.
+
+### Corrigido
+- Popup bloqueante de "erro na impressora" quando **não há** impressora configurada: agora a
+  venda segue em silêncio (o diálogo Repetir/Cancelar só aparece com impressora que falhou).
+- Testes E2E que abriam duas instâncias do app e travavam o desktop (porteiro anti-órfão +
+  execução serial); testes de UI marcados `Skip` por dependerem de foco de tela dedicado.
+
 ## [2.2.0] — Motor de promoções/combos automáticos
 
 ### Adicionado

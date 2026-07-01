@@ -17,6 +17,8 @@
     <PackageReference Include="System.Drawing.Common" Version="8.0.8" />
     <!-- Portas COM (impressoras seriais / Bluetooth SPP) -->
     <PackageReference Include="System.IO.Ports" Version="8.0.0" />
+    <!-- WMI: status online/offline da fila de impressao (robustez plug-and-play) -->
+    <PackageReference Include="System.Management" Version="8.0.0" />
   </ItemGroup>
 
 </Project>
