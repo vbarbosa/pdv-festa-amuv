@@ -23,3 +23,7 @@ dumps/
 # OS
 Thumbs.db
 Desktop.ini
+
+# ISOs de teste (VM Hyper-V) - nunca versionar (arquivos gigantes)
+qa/isos/
+*.iso
