@@ -245,7 +245,12 @@ public static class EscPosPrinter
         return ImprimirTicket(impressora, venda, cfg);
     }
 
-    /// <summary>Cupom de teste (status OK) para a tela de configuracao de impressora.</summary>
+    /// <summary>
+    /// Cupom de teste (status OK) para a tela de configuracao de impressora. Ao contrario de um
+    /// cupom de venda, o teste CONFIRMA o resultado: apos enviar, olha a fila do Windows por
+    /// alguns instantes. Se o job travar em erro (aparelho desligado/sem papel), devolve ok=false
+    /// com a causa — em vez do falso "enviado!". Assim o operador so ve verde se saiu papel.
+    /// </summary>
     public static (bool ok, string msg) ImprimirTeste(string impressora)
     {
         var linhas = new List<LinhaCupom>
@@ -259,7 +264,49 @@ public static class EscPosPrinter
             new(CupomFormatter.Centralizar("Acentos: cao pao acai")),
             new(CupomFormatter.Centralizar("Tudo certo! :)")),
         };
-        return EnviarRaw(impressora, MontarBytes(linhas));
+        var (ok, msg) = EnviarRaw(impressora, MontarBytes(linhas));
+        if (!ok) return (false, msg);
+
+        // porta COM/serial nao tem fila do Windows para inspecionar: o envio ja e a confirmacao.
+        if (impressora.StartsWith("COM", StringComparison.OrdinalIgnoreCase))
+            return (true, msg);
+
+        // fila USB/Windows: confirma que o job REALMENTE saiu (nao ficou preso em erro).
+        return ConfirmarSaidaDoJob(impressora);
+    }
+
+    /// <summary>
+    /// Espera ate ~4s a fila do Windows drenar o teste. Se algum job travar em Error/Offline,
+    /// devolve ok=false com a causa (impressora provavelmente desligada). Se a fila esvaziar,
+    /// ok=true (saiu papel). Best-effort: se WMI falhar, assume enviado.
+    /// </summary>
+    private static (bool ok, string msg) ConfirmarSaidaDoJob(string impressora)
+    {
+        try
+        {
+            var filtro = $"SELECT JobStatus FROM Win32_PrintJob WHERE Name LIKE '{impressora.Replace("'", "''")},%'";
+            for (int tentativa = 0; tentativa < 8; tentativa++)   // ~4s (8 x 500ms)
+            {
+                System.Threading.Thread.Sleep(500);
+                bool temJob = false;
+                using var jobs = new System.Management.ManagementObjectSearcher(filtro);
+                foreach (var j in jobs.Get())
+                {
+                    temJob = true;
+                    var s = j["JobStatus"]?.ToString() ?? "";
+                    if (s.Contains("Error", StringComparison.OrdinalIgnoreCase) ||
+                        s.Contains("Offline", StringComparison.OrdinalIgnoreCase) ||
+                        s.Contains("Retained", StringComparison.OrdinalIgnoreCase) ||
+                        s.Contains("Blocked", StringComparison.OrdinalIgnoreCase) ||
+                        s.Contains("PaperOut", StringComparison.OrdinalIgnoreCase))
+                        return (false, "o cupom travou na fila — impressora desligada, sem papel ou desconectada.");
+                }
+                if (!temJob) return (true, "");   // fila drenou: saiu papel.
+            }
+            // ainda ha job pendente (sem erro claro) apos 4s: pode estar lenta.
+            return (false, "o cupom ainda esta na fila (impressora nao respondeu). Verifique cabo/energia e papel.");
+        }
+        catch { return (true, ""); }   // WMI indisponivel: nao da pra confirmar, assume enviado.
     }
 
     /// <summary>

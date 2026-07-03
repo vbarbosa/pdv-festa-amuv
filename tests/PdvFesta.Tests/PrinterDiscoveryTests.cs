@@ -54,4 +54,34 @@ public class PrinterDiscoveryTests
             p.Contains("(Bluetooth)") || p.Contains("(serial)"),
             $"porta sem rotulo: {p}"));
     }
+
+    [Fact]
+    public void StatusFila_AlvoVazio_NaoOnlineComDescricao()
+    {
+        var st = PrinterDiscovery.StatusFila("");
+        Assert.False(st.PareceOnline);
+        Assert.False(st.ConfirmavelSoImprimindo);
+        Assert.False(string.IsNullOrWhiteSpace(st.Descricao));
+    }
+
+    [Theory]
+    [InlineData("COM6 (Bluetooth)")]
+    [InlineData("COM3")]
+    public void StatusFila_PortaCom_OnlineEConfirmavel(string alvo)
+    {
+        var st = PrinterDiscovery.StatusFila(alvo);
+        Assert.True(st.PareceOnline);
+        Assert.True(st.ConfirmavelSoImprimindo);   // porta pareada: envio confirma
+    }
+
+    [Fact]
+    public void StatusFila_FilaUsb_NuncaMenteProntaSemImprimir()
+    {
+        // para uma fila USB (mesmo inexistente no ambiente de teste), a descricao NAO pode
+        // afirmar "PRONTA/online" categoricamente — o status USB so e confirmado ao imprimir.
+        var st = PrinterDiscovery.StatusFila("MPT-II 58mm (USB001)");
+        Assert.DoesNotContain("PRONTA", st.Descricao, System.StringComparison.OrdinalIgnoreCase);
+        // se parece online, tem que ser explicitamente "confirmavel so imprimindo".
+        if (st.PareceOnline) Assert.True(st.ConfirmavelSoImprimindo);
+    }
 }

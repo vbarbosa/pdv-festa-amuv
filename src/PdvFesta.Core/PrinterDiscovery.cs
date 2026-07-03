@@ -91,21 +91,80 @@ public static class PrinterDiscovery
     /// A fila de impressao esta ONLINE? (nao marcada WorkOffline). Retorna true para portas
     /// COM/Bluetooth (nao tem fila do Windows). Best-effort: em duvida, considera online.
     /// </summary>
-    public static bool EstaOnline(string alvo)
+    public static bool EstaOnline(string alvo) => StatusFila(alvo).PareceOnline;
+
+    /// <summary>Estado apurado de uma fila de impressao (ou porta COM).</summary>
+    public readonly record struct StatusImpressora(bool PareceOnline, bool ConfirmavelSoImprimindo, string Descricao);
+
+    /// <summary>
+    /// Le o estado real da fila via WMI: alem do WorkOffline (toggle manual), tambem o
+    /// PrinterStatus/DetectedErrorState e jobs em erro. IMPORTANTE: impressora USB barata
+    /// (MPT/POS) NAO reporta desligamento/cabo removido — o Windows so descobre ao mandar
+    /// o job. Por isso, para fila USB, o status "pronta" e PROVISORIO (ConfirmavelSoImprimindo
+    /// = true): so o teste de impressao confirma de verdade. Nao mentimos "PRONTA".
+    /// </summary>
+    public static StatusImpressora StatusFila(string alvo)
     {
-        if (string.IsNullOrWhiteSpace(alvo)) return false;
-        if (alvo.StartsWith("COM", StringComparison.OrdinalIgnoreCase)) return true;  // serial/BT
+        if (string.IsNullOrWhiteSpace(alvo))
+            return new(false, false, "Nenhuma impressora selecionada.");
+
+        // porta serial/Bluetooth: existir a porta ja indica pareamento; sem fila do Windows.
+        if (alvo.StartsWith("COM", StringComparison.OrdinalIgnoreCase))
+            return new(true, true, "Porta pareada — o envio confirma de verdade.");
+
         try
         {
             using var searcher = new System.Management.ManagementObjectSearcher(
-                $"SELECT WorkOffline FROM Win32_Printer WHERE Name = '{alvo.Replace("'", "''")}'");
+                $"SELECT WorkOffline, PrinterStatus, PrinterState, DetectedErrorState " +
+                $"FROM Win32_Printer WHERE Name = '{alvo.Replace("'", "''")}'");
             foreach (var o in searcher.Get())
             {
-                var off = o["WorkOffline"];
-                if (off is bool b) return !b;   // online = NAO offline
+                bool offline = o["WorkOffline"] is bool b && b;
+                int erro = o["DetectedErrorState"] is uint e ? (int)e : 0;   // 0/2 = ok/desconhecido
+
+                // DetectedErrorState: 3=baixo papel,4=sem papel,5=baixo toner,6=sem toner,
+                // 7=porta aberta,8=atolamento,9=servico,10=saida cheia,11=nao disponivel.
+                string? falha = erro switch
+                {
+                    4 => "SEM PAPEL — troque a bobina.",
+                    8 => "PAPEL ATOLADO — verifique o mecanismo.",
+                    7 => "TAMPA ABERTA — feche a impressora.",
+                    11 => "INDISPONIVEL — verifique cabo/energia.",
+                    _ => null
+                };
+                if (offline)
+                    return new(false, false, "OFFLINE — verifique cabo/energia (ou 'usar offline' no Windows).");
+                if (falha is not null)
+                    return new(false, false, falha);
+
+                // sem erro conhecido: a fila esta pronta, MAS USB nao reporta desconexao fisica.
+                if (TemJobEmErro(alvo))
+                    return new(false, false, "ULTIMO CUPOM FALHOU — impressora provavelmente desligada.");
+                return new(true, true, "Instalada — o status real so e confirmado ao imprimir.");
             }
         }
-        catch { /* WMI indisponivel: assume online */ }
-        return true;
+        catch { /* WMI indisponivel */ }
+        return new(true, true, "Instalada — o status real so e confirmado ao imprimir.");
+    }
+
+    /// <summary>Ha job travado em erro na fila? (sinal forte de aparelho desligado/sem papel).</summary>
+    private static bool TemJobEmErro(string alvo)
+    {
+        try
+        {
+            using var jobs = new System.Management.ManagementObjectSearcher(
+                $"SELECT JobStatus FROM Win32_PrintJob WHERE Name LIKE '{alvo.Replace("'", "''")},%'");
+            foreach (var j in jobs.Get())
+            {
+                var s = j["JobStatus"]?.ToString() ?? "";
+                if (s.Contains("Error", StringComparison.OrdinalIgnoreCase) ||
+                    s.Contains("Offline", StringComparison.OrdinalIgnoreCase) ||
+                    s.Contains("Retained", StringComparison.OrdinalIgnoreCase) ||
+                    s.Contains("Blocked", StringComparison.OrdinalIgnoreCase))
+                    return true;
+            }
+        }
+        catch { }
+        return false;
     }
 }

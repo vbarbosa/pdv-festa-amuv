@@ -3,6 +3,21 @@
 Formato baseado em [Keep a Changelog](https://keepachangelog.com/pt-BR/).
 Versionamento [SemVer](https://semver.org/lang/pt-BR/).
 
+## [2.4.1] — Status honesto da impressora
+
+### Corrigido
+- **"Detectar automaticamente" mentia "PRONTA (online)"** com a impressora desligada / sem
+  cabo. Causa: o Windows só marca `WorkOffline` quando o usuário liga "usar offline"
+  manualmente — desconexão física de térmica USB barata (MPT/POS) **não** é reportada; o SO
+  só descobre ao mandar o job. Agora o status lê também `PrinterStatus`/`DetectedErrorState`
+  e jobs travados, e a tela é **honesta**: "Instalada — o status real só é confirmado ao
+  imprimir" (em vez de afirmar PRONTA), detectando também SEM PAPEL, TAMPA ABERTA e o último
+  cupom travado (sinal de aparelho desligado).
+- **"Imprimir Teste" dava "enviado!" mesmo com erro**: dizia sucesso só porque o Windows
+  aceitou o job na fila. Agora o teste **confirma a saída**: aguarda a fila drenar e, se o
+  job travar (Error/Offline/PaperOut), mostra "Falhou: … impressora desligada, sem papel ou
+  desconectada." — só fica verde ("OK — saiu papel!") se realmente imprimiu.
+
 ## [2.4.0] — Gestão avançada, permissões e QA em sandbox
 
 ### Adicionado

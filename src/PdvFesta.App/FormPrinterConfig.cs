@@ -157,14 +157,14 @@ public sealed class FormPrinterConfig : Form
         else
             tipo = "USB / fila do Windows";
 
-        bool online = PrinterDiscovery.EstaOnline(nome);
+        var st = PrinterDiscovery.StatusFila(nome);
         bool ehPadrao = string.Equals(nome, _servico.ImpressoraPadrao, StringComparison.OrdinalIgnoreCase);
 
         _lblInfo.Text =
             $"Tipo: {tipo}\n" +
-            $"Status: {(online ? "PRONTA (online)" : "OFFLINE — verifique cabo/energia")}\n" +
+            $"Status: {st.Descricao}\n" +
             $"Impressora padrão do sistema: {(ehPadrao ? "SIM (esta)" : "nao")}";
-        _lblInfo.ForeColor = online ? Color.FromArgb(40, 40, 40) : Color.FromArgb(180, 0, 0);
+        _lblInfo.ForeColor = st.PareceOnline ? Color.FromArgb(40, 40, 40) : Color.FromArgb(180, 0, 0);
     }
 
     /// <summary>Detecta a termica automaticamente (USB tem prioridade sobre Bluetooth) e seleciona.</summary>
@@ -207,8 +207,13 @@ public sealed class FormPrinterConfig : Form
             _lblStatus.Text = "Selecione uma impressora para testar.";
             return;
         }
+        _lblStatus.ForeColor = Color.FromArgb(90, 90, 90);
+        _lblStatus.Text = "Testando impressao... aguarde a confirmacao.";
+        _lblStatus.Refresh();
+
         var (ok, msg) = EscPosPrinter.ImprimirTeste(nome);
         _lblStatus.ForeColor = ok ? Color.FromArgb(0, 120, 0) : Color.FromArgb(180, 0, 0);
-        _lblStatus.Text = ok ? "Teste enviado! Confira o papel." : "Falha: " + msg;
+        _lblStatus.Text = ok ? "OK — saiu papel! Impressora funcionando." : "Falhou: " + msg;
+        AtualizarInfo();   // reflete o status apurado (ex.: virou OFFLINE apos o job travar)
     }
 }
