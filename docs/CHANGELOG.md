@@ -3,7 +3,18 @@
 Formato baseado em [Keep a Changelog](https://keepachangelog.com/pt-BR/).
 Versionamento [SemVer](https://semver.org/lang/pt-BR/).
 
-## [2.4.1] — Status honesto da impressora
+## [2.4.1] — Central de Impressora + status honesto
+
+### Adicionado
+- **Central de Impressora** (F12) reformulada, nível profissional:
+  - **Semáforo de status ao vivo** (verde PRONTA / amarelo ATENÇÃO / vermelho PARADA) com
+    dica de ação, auto-atualizado a cada 3s.
+  - **Detalhes técnicos**: tipo (USB/Bluetooth/serial), porta (USB001/COMx), driver e se é
+    padrão do PDV **e** do Windows.
+  - **Fila de impressão** na tela: lista os cupons pendentes (jobs em erro em vermelho) e
+    botão **Limpar fila** para destravar cupom preso sem sair do app.
+  - **Ações rápidas**: Detectar automaticamente, Salvar como impressora do PDV, Imprimir
+    teste (confirma a saída), Definir como padrão do Windows.
 
 ### Corrigido
 - **"Detectar automaticamente" mentia "PRONTA (online)"** com a impressora desligada / sem

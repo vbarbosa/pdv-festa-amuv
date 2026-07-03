@@ -93,8 +93,12 @@ public static class PrinterDiscovery
     /// </summary>
     public static bool EstaOnline(string alvo) => StatusFila(alvo).PareceOnline;
 
+    /// <summary>Nivel para o semaforo da tela: verde=pronta, amarelo=atencao, vermelho=parada.</summary>
+    public enum Semaforo { Verde, Amarelo, Vermelho }
+
     /// <summary>Estado apurado de uma fila de impressao (ou porta COM).</summary>
-    public readonly record struct StatusImpressora(bool PareceOnline, bool ConfirmavelSoImprimindo, string Descricao);
+    public readonly record struct StatusImpressora(
+        bool PareceOnline, bool ConfirmavelSoImprimindo, string Descricao, Semaforo Nivel);
 
     /// <summary>
     /// Le o estado real da fila via WMI: alem do WorkOffline (toggle manual), tambem o
@@ -106,11 +110,11 @@ public static class PrinterDiscovery
     public static StatusImpressora StatusFila(string alvo)
     {
         if (string.IsNullOrWhiteSpace(alvo))
-            return new(false, false, "Nenhuma impressora selecionada.");
+            return new(false, false, "Nenhuma impressora selecionada.", Semaforo.Vermelho);
 
         // porta serial/Bluetooth: existir a porta ja indica pareamento; sem fila do Windows.
         if (alvo.StartsWith("COM", StringComparison.OrdinalIgnoreCase))
-            return new(true, true, "Porta pareada — o envio confirma de verdade.");
+            return new(true, true, "Porta pareada — o envio confirma de verdade.", Semaforo.Amarelo);
 
         try
         {
@@ -126,6 +130,7 @@ public static class PrinterDiscovery
                 // 7=porta aberta,8=atolamento,9=servico,10=saida cheia,11=nao disponivel.
                 string? falha = erro switch
                 {
+                    3 => "POUCO PAPEL — bobina acabando.",
                     4 => "SEM PAPEL — troque a bobina.",
                     8 => "PAPEL ATOLADO — verifique o mecanismo.",
                     7 => "TAMPA ABERTA — feche a impressora.",
@@ -133,18 +138,112 @@ public static class PrinterDiscovery
                     _ => null
                 };
                 if (offline)
-                    return new(false, false, "OFFLINE — verifique cabo/energia (ou 'usar offline' no Windows).");
+                    return new(false, false, "OFFLINE — verifique cabo/energia (ou 'usar offline' no Windows).", Semaforo.Vermelho);
+                if (erro == 3)   // pouco papel: ainda imprime, mas avisa
+                    return new(true, true, falha!, Semaforo.Amarelo);
                 if (falha is not null)
-                    return new(false, false, falha);
+                    return new(false, false, falha, Semaforo.Vermelho);
 
                 // sem erro conhecido: a fila esta pronta, MAS USB nao reporta desconexao fisica.
                 if (TemJobEmErro(alvo))
-                    return new(false, false, "ULTIMO CUPOM FALHOU — impressora provavelmente desligada.");
-                return new(true, true, "Instalada — o status real so e confirmado ao imprimir.");
+                    return new(false, false, "ULTIMO CUPOM FALHOU — impressora provavelmente desligada.", Semaforo.Vermelho);
+                return new(true, true, "Instalada — o status real so e confirmado ao imprimir.", Semaforo.Amarelo);
             }
         }
         catch { /* WMI indisponivel */ }
-        return new(true, true, "Instalada — o status real so e confirmado ao imprimir.");
+        return new(true, true, "Instalada — o status real so e confirmado ao imprimir.", Semaforo.Amarelo);
+    }
+
+    /// <summary>Um job na fila de impressao do Windows (para a tela mostrar/gerenciar).</summary>
+    public readonly record struct JobFila(uint Id, string Documento, string Status, string DonoOuHora);
+
+    /// <summary>Lista os jobs pendentes na fila de uma impressora (vazio para porta COM).</summary>
+    public static List<JobFila> ListarFila(string alvo)
+    {
+        var lista = new List<JobFila>();
+        if (string.IsNullOrWhiteSpace(alvo) ||
+            alvo.StartsWith("COM", StringComparison.OrdinalIgnoreCase)) return lista;
+        try
+        {
+            using var jobs = new System.Management.ManagementObjectSearcher(
+                $"SELECT JobId, Document, JobStatus, Owner, TimeSubmitted " +
+                $"FROM Win32_PrintJob WHERE Name LIKE '{alvo.Replace("'", "''")},%'");
+            foreach (var j in jobs.Get())
+            {
+                uint id = j["JobId"] is uint u ? u : 0;
+                var doc = j["Document"]?.ToString() ?? "(cupom)";
+                var st  = j["JobStatus"]?.ToString() ?? "";
+                var dono = j["Owner"]?.ToString() ?? "";
+                lista.Add(new JobFila(id, doc, string.IsNullOrWhiteSpace(st) ? "Na fila" : st, dono));
+            }
+        }
+        catch { /* WMI indisponivel */ }
+        return lista;
+    }
+
+    /// <summary>Cancela TODOS os jobs presos na fila (destrava cupom sem sair do app). Retorna quantos.</summary>
+    public static int LimparFila(string alvo)
+    {
+        if (string.IsNullOrWhiteSpace(alvo) ||
+            alvo.StartsWith("COM", StringComparison.OrdinalIgnoreCase)) return 0;
+        int n = 0;
+        try
+        {
+            using var jobs = new System.Management.ManagementObjectSearcher(
+                $"SELECT * FROM Win32_PrintJob WHERE Name LIKE '{alvo.Replace("'", "''")},%'");
+            foreach (System.Management.ManagementObject j in jobs.Get())
+                try { j.Delete(); n++; } catch { }
+        }
+        catch { /* WMI indisponivel */ }
+        return n;
+    }
+
+    /// <summary>Detalhes tecnicos da fila: porta, driver, e se e a padrao do Windows.</summary>
+    public readonly record struct DetalheTecnico(string Porta, string Driver, bool PadraoDoWindows);
+
+    /// <summary>Le porta (USB001/COMx), driver e flag de padrao do Windows para exibir na tela.</summary>
+    public static DetalheTecnico DetalhesTecnicos(string alvo)
+    {
+        if (string.IsNullOrWhiteSpace(alvo)) return new("—", "—", false);
+        if (alvo.StartsWith("COM", StringComparison.OrdinalIgnoreCase))
+        {
+            var porta = alvo.Split(' ')[0].ToUpperInvariant();
+            var kind = alvo.Contains("Bluetooth", StringComparison.OrdinalIgnoreCase) ? "Bluetooth (SPP)" : "Serial";
+            return new(porta, kind, false);
+        }
+        try
+        {
+            using var s = new System.Management.ManagementObjectSearcher(
+                $"SELECT PortName, DriverName, Default FROM Win32_Printer WHERE Name = '{alvo.Replace("'", "''")}'");
+            foreach (var o in s.Get())
+                return new(
+                    o["PortName"]?.ToString() ?? "—",
+                    o["DriverName"]?.ToString() ?? "—",
+                    o["Default"] is bool d && d);
+        }
+        catch { }
+        return new("—", "—", false);
+    }
+
+    /// <summary>Define a impressora como PADRAO do Windows (best-effort). Retorna true se ok.</summary>
+    public static bool DefinirPadraoDoWindows(string alvo)
+    {
+        if (string.IsNullOrWhiteSpace(alvo) ||
+            alvo.StartsWith("COM", StringComparison.OrdinalIgnoreCase)) return false;
+        try
+        {
+            using var s = new System.Management.ManagementObjectSearcher(
+                $"SELECT * FROM Win32_Printer WHERE Name = '{alvo.Replace("'", "''")}'");
+            foreach (System.Management.ManagementObject o in s.Get())
+            {
+                var r = o.InvokeMethod("SetDefaultPrinter", null, null);
+                // SetDefaultPrinter retorna ReturnValue=0 no sucesso (ou null em alguns drivers).
+                var code = r?["ReturnValue"];
+                return code is null || (code is uint u && u == 0);
+            }
+        }
+        catch { }
+        return false;
     }
 
     /// <summary>Ha job travado em erro na fila? (sinal forte de aparelho desligado/sem papel).</summary>
