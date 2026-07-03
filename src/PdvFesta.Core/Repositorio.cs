@@ -58,7 +58,8 @@ CREATE TABLE IF NOT EXISTS vendas (
     troco_cent    INTEGER NOT NULL DEFAULT 0,
     operador      TEXT NOT NULL DEFAULT '',
     caixa_id      INTEGER NULL,
-    status        INTEGER NOT NULL DEFAULT 0
+    status        INTEGER NOT NULL DEFAULT 0,
+    impressoes    INTEGER NOT NULL DEFAULT 0
 );
 
 CREATE TABLE IF NOT EXISTS caixa (
@@ -145,8 +146,9 @@ CREATE INDEX IF NOT EXISTS ix_promoitens ON promocao_itens(promocao_id);";
             alter.CommandText = ddl;
             alter.ExecuteNonQuery();
         }
-        if (!colunas.Contains("caixa_id")) AddColuna("ALTER TABLE vendas ADD COLUMN caixa_id INTEGER NULL;");
-        if (!colunas.Contains("status"))   AddColuna("ALTER TABLE vendas ADD COLUMN status INTEGER NOT NULL DEFAULT 0;");
+        if (!colunas.Contains("caixa_id"))   AddColuna("ALTER TABLE vendas ADD COLUMN caixa_id INTEGER NULL;");
+        if (!colunas.Contains("status"))     AddColuna("ALTER TABLE vendas ADD COLUMN status INTEGER NOT NULL DEFAULT 0;");
+        if (!colunas.Contains("impressoes")) AddColuna("ALTER TABLE vendas ADD COLUMN impressoes INTEGER NOT NULL DEFAULT 0;");
 
         // Agora as colunas existem com certeza: cria o indice.
         using var idx = conn.CreateCommand();
@@ -241,7 +243,7 @@ VALUES ($vid, $pid, $nome, $preco, $qtd);";
 
         using (var cmd = conn.CreateCommand())
         {
-            cmd.CommandText = "SELECT id, data_hora, total_cent, forma, recebido_cent, troco_cent, operador, caixa_id, status FROM vendas ORDER BY id;";
+            cmd.CommandText = "SELECT id, data_hora, total_cent, forma, recebido_cent, troco_cent, operador, caixa_id, status, impressoes FROM vendas ORDER BY id;";
             using var r = cmd.ExecuteReader();
             while (r.Read())
             {
@@ -255,7 +257,8 @@ VALUES ($vid, $pid, $nome, $preco, $qtd);";
                     TrocoCentavos = r.GetInt32(5),
                     Operador = r.GetString(6),
                     CaixaId = r.IsDBNull(7) ? null : r.GetInt64(7),
-                    Status = (StatusVenda)r.GetInt32(8)
+                    Status = (StatusVenda)r.GetInt32(8),
+                    Impressoes = r.IsDBNull(9) ? 0 : r.GetInt32(9)
                 };
                 vendas[v.Id] = v;
             }
@@ -295,6 +298,22 @@ VALUES ($vid, $pid, $nome, $preco, $qtd);";
         cmd.CommandText = "UPDATE vendas SET status = 1 WHERE id = $id;";
         cmd.Parameters.AddWithValue("$id", vendaId);
         cmd.ExecuteNonQuery();
+    }
+
+    /// <summary>
+    /// Incrementa e retorna o contador de impressoes de uma venda (1a via + reimpressoes).
+    /// Chamado apos cada impressao BEM-SUCEDIDA do cupom, para o Historico mostrar quantas
+    /// vezes a nota saiu (controle contra reimpressao indevida).
+    /// </summary>
+    public int RegistrarImpressao(long vendaId)
+    {
+        using var conn = Abrir();
+        using var cmd = conn.CreateCommand();
+        cmd.CommandText = "UPDATE vendas SET impressoes = impressoes + 1 WHERE id = $id; " +
+                          "SELECT impressoes FROM vendas WHERE id = $id;";
+        cmd.Parameters.AddWithValue("$id", vendaId);
+        var r = cmd.ExecuteScalar();
+        return r is long n ? (int)n : 0;
     }
 
     // ---------- CATALOGO ----------
@@ -377,8 +396,8 @@ VALUES ($id, $nome, $preco, $cat, $atalho, $ativo, $comp);";
             {
                 cmd.Transaction = tx;
                 cmd.CommandText = @"
-INSERT INTO vendas (id, data_hora, total_cent, forma, recebido_cent, troco_cent, operador, caixa_id, status)
-VALUES ($id, $dh, $total, $forma, $rec, $troco, $op, $caixa, $status);";
+INSERT INTO vendas (id, data_hora, total_cent, forma, recebido_cent, troco_cent, operador, caixa_id, status, impressoes)
+VALUES ($id, $dh, $total, $forma, $rec, $troco, $op, $caixa, $status, $impr);";
                 cmd.Parameters.AddWithValue("$id", v.Id);
                 cmd.Parameters.AddWithValue("$dh", v.DataHora.ToString("o"));
                 cmd.Parameters.AddWithValue("$total", v.TotalCentavos);
@@ -388,6 +407,7 @@ VALUES ($id, $dh, $total, $forma, $rec, $troco, $op, $caixa, $status);";
                 cmd.Parameters.AddWithValue("$op", v.Operador);
                 cmd.Parameters.AddWithValue("$caixa", (object?)v.CaixaId ?? DBNull.Value);
                 cmd.Parameters.AddWithValue("$status", (int)v.Status);
+                cmd.Parameters.AddWithValue("$impr", v.Impressoes);
                 cmd.ExecuteNonQuery();
             }
             foreach (var item in v.Itens)

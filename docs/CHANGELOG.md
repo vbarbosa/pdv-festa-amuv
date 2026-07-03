@@ -3,7 +3,28 @@
 Formato baseado em [Keep a Changelog](https://keepachangelog.com/pt-BR/).
 Versionamento [SemVer](https://semver.org/lang/pt-BR/).
 
-## [2.4.1] — Central de Impressora + status honesto
+## [2.4.1] — Central de Impressora, modos de vale e blindagem de impressão
+
+### Adicionado
+- **Novo modo de cupom "Só Vales destacáveis"**: imprime apenas as fichas (sem o recibo
+  gerencial antes), com um **mini-cabeçalho da festa em cada ficha** (nome do evento + nº da
+  venda + data) para a ficha se identificar sozinha na barraca. Economiza papel.
+- **Coluna "Impressões"** no Histórico de Vendas: mostra quantas vezes cada nota foi impressa
+  (1ª via + reimpressões). Reimpressas (2x+) aparecem em destaque; nunca impressas em cinza.
+
+### Alterado
+- **Ficha de Consumo** agora sai **1 ficha por unidade** (não agrupa "3X"): cada unidade é uma
+  ficha destacável, entregável em barracas diferentes. Cabeçalho melhorado (nome da festa,
+  subtítulo/nº da venda e data) — a ficha deixa de ser só o item solto no topo.
+- **Impressão blindada contra travar o caixa**: teto de tempo de 15s (impressora que não
+  responde não congela a venda — a nota é salva e pode ser reimpressa), e limpeza automática
+  de job agarrado no spooler (reinicia o serviço se um cupom trava a fila).
+
+### Corrigido / Segurança
+- **Venda cancelada (estornada) não pode mais ser reimpressa** — evita entregar ficha de uma
+  venda devolvida (bloqueio no serviço e na tela de Histórico).
+
+## [2.4.1-central] — Central de Impressora + status honesto
 
 ### Adicionado
 - **Central de Impressora** (F12) reformulada, nível profissional:

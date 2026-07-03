@@ -24,6 +24,8 @@
     <PackageReference Include="System.IO.Ports" Version="8.0.0" />
     <!-- WMI: status online/offline da fila de impressao (robustez plug-and-play) -->
     <PackageReference Include="System.Management" Version="8.0.0" />
+    <!-- Reinicia o Spooler para soltar job agarrado (Error|Printing) que trava a fila -->
+    <PackageReference Include="System.ServiceProcess.ServiceController" Version="8.0.0" />
   </ItemGroup>
 
 </Project>

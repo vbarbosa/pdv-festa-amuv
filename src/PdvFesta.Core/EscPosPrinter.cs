@@ -90,7 +90,10 @@ public static class EscPosPrinter
     // Vales/expandida: SO altura dupla (largura normal) => fonte menor/mais estreita que a
     // 2x2, mas ainda grande e legivel de longe. Cabe o nome todo sem quebrar tanto.
     private static readonly byte[] ESC_DOUBLE_HEIGHT = { ESC, 0x21, 0x10 };
-    private static readonly byte[] GS_CUT_PAPER = { GS, 0x56, 0x01 };       // GS V 1 -> corte parcial SEM avanco extra (economiza bobina)
+    // GS V 1 -> corte parcial SEM avanco extra. E o comando que a MPT-II digere (testado): a
+    // variante 'GS V 66 n' (avanco parametrizado) TRAVA o firmware dela. O corte sai logo apos
+    // a ultima linha; o residuo de papel branco restante e a distancia fisica cabeca->lamina.
+    private static readonly byte[] GS_CUT_PAPER = { GS, 0x56, 0x01 };
     #endregion
 
     /// <summary>
@@ -105,6 +108,24 @@ public static class EscPosPrinter
         if (string.IsNullOrWhiteSpace(alvo))
             return (false, "Nenhuma impressora configurada.");
 
+        // TETO DE TEMPO: impressao NUNCA pode congelar o caixa. Se a impressora travar (cabo
+        // solto, spooler ocupado, firmware embolado), a operacao e abandonada apos 15s e a
+        // venda segue — o cupom pode ser reimpresso pelo Historico. Proteger o caixa > o papel.
+        try
+        {
+            var tarefa = System.Threading.Tasks.Task.Run(() => EnviarRawInterno(alvo, dados));
+            if (tarefa.Wait(TimeSpan.FromSeconds(15)))
+                return tarefa.Result;
+            return (false, "A impressora nao respondeu a tempo (15s). A venda foi salva — reimprima pelo Historico.");
+        }
+        catch (Exception ex)
+        {
+            return (false, "Falha ao imprimir: " + ex.Message);
+        }
+    }
+
+    private static (bool ok, string msg) EnviarRawInterno(string alvo, byte[] dados)
+    {
         var porta = ExtrairPortaCom(alvo);
         return porta is not null ? EnviarSerial(porta, dados) : EnviarSpooler(alvo, dados);
     }
@@ -219,6 +240,55 @@ public static class EscPosPrinter
             }
         }
         catch { /* WMI totalmente indisponivel: segue sem preparar */ }
+
+        // (3) SALVAGUARDA: um job travado JA EM IMPRESSAO ("Error | Printing") nao sai com
+        // j.Delete() — fica agarrado no spooler e bloqueia TODOS os proximos cupons (foi o
+        // que derrubou a fila no teste de campo). Se ainda houver job preso apos o passo (2),
+        // reinicia o spooler do usuario, que e o unico jeito de solta-lo. Best-effort e seguro.
+        if (HaJobPresoAposLimpeza(impressora))
+            ReiniciarSpoolerBestEffort();
+    }
+
+    /// <summary>Sobrou algum job em erro/impressao presa apos a tentativa de limpeza?</summary>
+    private static bool HaJobPresoAposLimpeza(string impressora)
+    {
+        try
+        {
+            using var jobs = new System.Management.ManagementObjectSearcher(
+                $"SELECT JobStatus FROM Win32_PrintJob WHERE Name LIKE '{impressora.Replace("'", "''")},%'");
+            foreach (var j in jobs.Get())
+            {
+                var s = j["JobStatus"]?.ToString() ?? "";
+                if (s.Contains("Error", StringComparison.OrdinalIgnoreCase) ||
+                    s.Contains("Offline", StringComparison.OrdinalIgnoreCase) ||
+                    s.Contains("Retained", StringComparison.OrdinalIgnoreCase) ||
+                    s.Contains("Blocked", StringComparison.OrdinalIgnoreCase))
+                    return true;
+            }
+        }
+        catch { }
+        return false;
+    }
+
+    /// <summary>
+    /// Reinicia o servico Spooler para soltar job agarrado (Error|Printing). Roda no contexto
+    /// do usuario; se nao tiver permissao, apenas ignora (o cupom seguinte tentara mesmo assim).
+    /// NUNCA lanca — proteger o caixa e prioridade sobre limpar a fila.
+    /// </summary>
+    private static void ReiniciarSpoolerBestEffort()
+    {
+        try
+        {
+            using var sc = new System.ServiceProcess.ServiceController("Spooler");
+            if (sc.Status == System.ServiceProcess.ServiceControllerStatus.Running)
+            {
+                sc.Stop();
+                sc.WaitForStatus(System.ServiceProcess.ServiceControllerStatus.Stopped, TimeSpan.FromSeconds(5));
+            }
+            sc.Start();
+            sc.WaitForStatus(System.ServiceProcess.ServiceControllerStatus.Running, TimeSpan.FromSeconds(5));
+        }
+        catch { /* sem permissao / servico ocupado: segue — nao derruba o caixa */ }
     }
 
     /// <summary>Imprime o ticket de consumo respeitando o modo/layout configurado.</summary>

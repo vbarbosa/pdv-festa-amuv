@@ -42,10 +42,12 @@ public class TicketTests
         var cfg = new ConfigCupom { Modo = ModoCupom.FichaConsumo };
         var linhas = CupomFormatter.MontarTicket(VendaExemplo(), cfg);
 
-        // nenhuma linha mostra "R$" (ficha economica nao imprime valores)
-        Assert.DoesNotContain(linhas, l => l.Texto.Contains("R$"));
-        // deve existir a ficha do bolo com "2X"
-        Assert.Contains(linhas, l => l.Estilo == EstiloLinha.Expandida && l.Texto.Contains("2X"));
+        // nenhuma linha de VALOR de item (a ficha economica nao imprime "R$")
+        Assert.DoesNotContain(linhas.Where(l => l.Estilo == EstiloLinha.Expandida),
+            l => l.Texto.Contains("R$"));
+        // Ficha agora e 1 POR UNIDADE: cada ficha comeca com "1X" (nao agrupa "2X").
+        Assert.Contains(linhas, l => l.Estilo == EstiloLinha.Expandida && l.Texto.StartsWith("1X"));
+        Assert.DoesNotContain(linhas, l => l.Estilo == EstiloLinha.Expandida && l.Texto.Contains("2X"));
         // toda linha expandida respeita as 16 colunas da fonte dupla
         Assert.All(linhas.Where(l => l.Estilo == EstiloLinha.Expandida),
             l => Assert.True(l.Texto.Length <= CupomFormatter.LarguraExpandida,
@@ -53,12 +55,12 @@ public class TicketTests
     }
 
     [Fact]
-    public void Ficha_SepararPorItem_InsereCorteEntreItens()
+    public void Ficha_SepararPorItem_InsereCorteEntreCadaUnidade()
     {
         var cfg = new ConfigCupom { Modo = ModoCupom.FichaConsumo, SepararPorItem = true };
         var linhas = CupomFormatter.MontarTicket(VendaExemplo(), cfg);
-        // 2 itens -> 1 corte entre eles
-        Assert.Equal(1, linhas.Count(l => l.Estilo == EstiloLinha.Corte));
+        // 1 Quentao + 2 Bolos = 3 UNIDADES -> 2 cortes entre elas (1 por unidade, nao por item).
+        Assert.Equal(2, linhas.Count(l => l.Estilo == EstiloLinha.Corte));
     }
 
     [Fact]

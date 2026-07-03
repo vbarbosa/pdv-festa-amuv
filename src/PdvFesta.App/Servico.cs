@@ -224,14 +224,22 @@ public sealed class Servico : IDisposable
     /// </summary>
     private static bool ModoDemo => Environment.GetEnvironmentVariable("PDV_DEMO") == "1";
 
-    /// <summary>Imprime (ou reimprime) o cupom de uma venda usando o layout configurado.</summary>
+    /// <summary>
+    /// Imprime (ou reimprime) o cupom de uma venda usando o layout configurado.
+    /// SEGURANCA: nao imprime venda CANCELADA (estornada). Ao imprimir com sucesso, registra
+    /// a impressao (contador de vias) para o Historico mostrar quantas vezes a nota saiu.
+    /// </summary>
     public (bool ok, string msg) ImprimirVenda(Venda venda)
     {
-        if (ModoDemo) return (true, "OK (demo)");
+        if (venda.Cancelada)
+            return (false, "Venda CANCELADA (estornada) nao pode ser reimpressa.");
+        if (ModoDemo) { venda.Impressoes = Repo.RegistrarImpressao(venda.Id); return (true, "OK (demo)"); }
         var impressora = ImpressoraPadrao;
         if (string.IsNullOrWhiteSpace(impressora))
             return (false, "Nenhuma impressora configurada (F12).");
-        return EscPosPrinter.ImprimirTicket(impressora, venda, LerConfigCupom());
+        var (ok, msg) = EscPosPrinter.ImprimirTicket(impressora, venda, LerConfigCupom());
+        if (ok) venda.Impressoes = Repo.RegistrarImpressao(venda.Id);   // conta 1a via + reimpressoes
+        return (ok, msg);
     }
 
     /// <summary>Imprime a Leitura Z do turno atual.</summary>
