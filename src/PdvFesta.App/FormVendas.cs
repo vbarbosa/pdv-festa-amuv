@@ -269,30 +269,27 @@ public sealed class FormVendas : Form
         _lblTotal.ForeColor = Color.FromArgb(0, 110, 0);
         _lblTotal.BackColor = Color.White;
 
-        // barra de acao final
-        var barra = new TableLayoutPanel { Dock = DockStyle.Bottom, Height = 84, ColumnCount = 2, RowCount = 1 };
-        barra.ColumnStyles.Add(new ColumnStyle(SizeType.Percent, 60));
-        barra.ColumnStyles.Add(new ColumnStyle(SizeType.Percent, 40));
+        // barra de acao final: REMOVER (correcao) | PAGAR | CANCELAR, todos juntos embaixo.
+        var barra = new TableLayoutPanel { Dock = DockStyle.Bottom, Height = 92, ColumnCount = 3, RowCount = 1 };
+        barra.ColumnStyles.Add(new ColumnStyle(SizeType.Percent, 30));   // remover
+        barra.ColumnStyles.Add(new ColumnStyle(SizeType.Percent, 42));   // pagar (maior)
+        barra.ColumnStyles.Add(new ColumnStyle(SizeType.Percent, 28));   // cancelar
+        var btnRemover = BotaoAcao("🗑 Remover\nItem [Del]", Color.FromArgb(200, 120, 40));
+        btnRemover.Font = new Font("Segoe UI", 11F, FontStyle.Bold);   // cabe 2 linhas
+        btnRemover.Click += (s, e) => RemoverSelecionado();
         var btnPagar = BotaoAcao("PAGAR [F2]", Color.FromArgb(0, 150, 0));
         btnPagar.Name = "btnPagar";
         btnPagar.Click += (s, e) => AbrirPagamento();
-        var btnCancelar = BotaoAcao("CANCELAR [Esc]", Color.FromArgb(180, 60, 60));
+        var btnCancelar = BotaoAcao("CANCELAR\n[Esc]", Color.FromArgb(180, 60, 60));
+        btnCancelar.Font = new Font("Segoe UI", 11F, FontStyle.Bold);
         btnCancelar.Click += (s, e) => LimparCarrinho();
-        barra.Controls.Add(btnPagar, 0, 0);
-        barra.Controls.Add(btnCancelar, 1, 0);
+        barra.Controls.Add(btnRemover, 0, 0);
+        barra.Controls.Add(btnPagar, 1, 0);
+        barra.Controls.Add(btnCancelar, 2, 0);
 
         // a grid vai num host com margem lateral p/ nao encostar/cortar na borda direita
         var gridHost = new Panel { Dock = DockStyle.Fill, Padding = new Padding(6, 4, 8, 4), BackColor = Color.White };
         gridHost.Controls.Add(_grid);
-
-        // botao visivel de correcao de pedido (alem de Delete/Backspace na grid)
-        var btnRemover = new Button
-        {
-            Text = "🗑  Remover Item Selecionado (Del)", Dock = DockStyle.Top, Height = 40,
-            BackColor = Color.FromArgb(200, 120, 40), ForeColor = Color.White,
-            FlatStyle = FlatStyle.Flat, Font = new Font("Segoe UI", 11F, FontStyle.Bold), TabStop = false
-        };
-        btnRemover.Click += (s, e) => RemoverSelecionado();
 
         // ALEM do botao: clicar com o BOTAO DIREITO na linha, ou dar DUPLO-CLIQUE, remove o
         // item — a remocao deixa de ficar "amarrada" so ao botao Cancelar/Del.
@@ -319,7 +316,6 @@ public sealed class FormVendas : Form
         painel.Controls.Add(gridHost);
         painel.Controls.Add(barra);
         painel.Controls.Add(_lblTotal);
-        painel.Controls.Add(btnRemover);
         painel.Controls.Add(cab);
     }
 
