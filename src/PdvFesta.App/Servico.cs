@@ -48,7 +48,8 @@ public sealed class Servico : IDisposable
         _autoBackup = new AutoBackupTimer(
             dbPath,
             obterPastaDestino: () => Repo.LerConfig("backup_pasta", ""),
-            log: _ => { /* silencioso; erros nao derrubam o caixa */ });
+            log: _ => { /* silencioso; erros nao derrubam o caixa */ },
+            obterManter: () => int.TryParse(Repo.LerConfig("backup_manter", "10"), out var n) ? n : 10);
         IniciarAutoBackup();
     }
 
@@ -64,6 +65,11 @@ public sealed class Servico : IDisposable
     public int IntervaloBackupMin => int.TryParse(Repo.LerConfig("backup_intervalo_min", "0"), out var m) ? m : 0;
     public void DefinirPastaBackup(string p) => Repo.SalvarConfig("backup_pasta", p);
     public void DefinirIntervaloBackup(int min) { Repo.SalvarConfig("backup_intervalo_min", min.ToString()); IniciarAutoBackup(); }
+    /// <summary>Quantos backups manter ao limpar antigos (0 = manter todos). Padrao 10.</summary>
+    public int BackupsManter => int.TryParse(Repo.LerConfig("backup_manter", "10"), out var n) ? n : 10;
+    public void DefinirBackupsManter(int n) => Repo.SalvarConfig("backup_manter", Math.Max(0, n).ToString());
+    /// <summary>Total de vendas no banco (para o resumo de "saude" da tela de backup).</summary>
+    public int TotalVendas() => Repo.ListarVendas().Count;
 
     public List<Produto> Produtos() => Repo.ListarProdutos().Where(p => p.Ativo).ToList();
     /// <summary>Catalogo completo (inclui inativos) para a tela de gestao.</summary>
@@ -136,6 +142,29 @@ public sealed class Servico : IDisposable
         TurnoAtual.Fechamento = DateTime.Now;
         TurnoAtual = null;
         Log.Info($"Caixa FECHADO #{id}");
+
+        // BACKUP AUTOMATICO ao fechar o caixa: fim de turno e o momento natural para garantir
+        // os dados do dia. Best-effort: nunca derruba o fechamento se o backup falhar.
+        BackupAutomaticoAoFechar();
+    }
+
+    /// <summary>Gera backup ao fechar o caixa e limpa antigos (se ha pasta configurada).</summary>
+    private void BackupAutomaticoAoFechar()
+    {
+        var pasta = PastaBackup;
+        if (string.IsNullOrWhiteSpace(pasta)) return;   // sem pasta -> nao faz (nada a fazer)
+        try
+        {
+            var zip = BackupManager.GerarZip(CaminhoBanco, pasta);
+            Log.Info($"Backup automatico (fechamento) gerado: {zip}");
+            int manter = BackupsManter;
+            if (manter > 0)
+            {
+                int apagados = BackupManager.LimparAntigos(pasta, manter);
+                if (apagados > 0) Log.Info($"Backup: {apagados} antigo(s) apagado(s) (mantendo {manter}).");
+            }
+        }
+        catch (Exception ex) { Log.Aviso($"Backup automatico ao fechar falhou: {ex.Message}"); }
     }
 
     /// <summary>
