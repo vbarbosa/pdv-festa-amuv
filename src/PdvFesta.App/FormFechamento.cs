@@ -261,38 +261,10 @@ public sealed class FormFechamento : Form
 
         try
         {
-            var cultura = CultureInfo.CurrentCulture;
-            var sep = cultura.TextInfo.ListSeparator;      // ';' (pt-BR) ou ',' (en-US)
-            if (string.IsNullOrEmpty(sep)) sep = ";";
-
-            // escapa campos que contenham o separador, aspas ou quebra de linha
-            string Campo(string s) =>
-                (s.Contains(sep) || s.Contains('"') || s.Contains('\n'))
-                    ? "\"" + s.Replace("\"", "\"\"") + "\""
-                    : s;
-            string Reais(int c) => (c / 100m).ToString("0.00", cultura);
-            string Linha(params string[] cols) => string.Join(sep, cols.Select(Campo));
-
-            var v = _ultimoResumo.Vendas;
-            var sb = new StringBuilder();
-            sb.AppendLine(Linha("RESUMO DO CAIXA", "Valor (R$)"));
-            sb.AppendLine(Linha("Fundo inicial", Reais(_ultimoResumo.FundoCentavos)));
-            sb.AppendLine(Linha("Dinheiro", Reais(v.TotalDinheiroCentavos)));
-            sb.AppendLine(Linha("Pix", Reais(v.TotalPixCentavos)));
-            sb.AppendLine(Linha("Débito", Reais(v.TotalDebitoCentavos)));
-            sb.AppendLine(Linha("Crédito", Reais(v.TotalCreditoCentavos)));
-            sb.AppendLine(Linha("Suprimentos", Reais(_ultimoResumo.SuprimentosCentavos)));
-            sb.AppendLine(Linha("Sangrias", Reais(_ultimoResumo.SangriasCentavos)));
-            sb.AppendLine(Linha("TOTAL EM GAVETA", Reais(_ultimoResumo.TotalGavetaCentavos)));
-            sb.AppendLine(Linha("Faturamento bruto", Reais(v.FaturamentoBrutoCentavos)));
-            sb.AppendLine(Linha("Nº de vendas", v.QuantidadeVendas.ToString(cultura)));
-            sb.AppendLine();
-            sb.AppendLine(Linha("Produto", "Quantidade", "Total (R$)"));
-            foreach (var it in _ultimosItens)
-                sb.AppendLine(Linha(it.Nome, it.Quantidade.ToString(cultura), Reais(it.TotalCentavos)));
-
-            File.WriteAllText(dlg.FileName, sb.ToString(), new UTF8Encoding(true));
-            MessageBox.Show($"CSV exportado (separador \"{sep}\"):\n{dlg.FileName}", "Exportar Excel",
+            // reusa o ExportadorCsv do Core (mesma logica do Historico/menu, sem duplicar)
+            var csv = ExportadorCsv.Resumo(_ultimoResumo, _ultimosItens);
+            File.WriteAllText(dlg.FileName, csv, new UTF8Encoding(true));
+            MessageBox.Show($"CSV exportado:\n{dlg.FileName}", "Exportar Excel",
                 MessageBoxButtons.OK, MessageBoxIcon.Information);
         }
         catch (Exception ex)

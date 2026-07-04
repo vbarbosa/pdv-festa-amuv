@@ -152,6 +152,7 @@ public sealed class FormVendas : Form
         mArquivo.DropDownItems.Add(Item("Painel em Tempo Real", Keys.F4, (s, e) => AbrirDashboard()));
         mArquivo.DropDownItems.Add(Item("Histórico de Vendas", Keys.F3, (s, e) => AbrirHistorico()));
         mArquivo.DropDownItems.Add(Item("Fechamento de Caixa", Keys.F9, (s, e) => AbrirFechamento()));
+        mArquivo.DropDownItems.Add("Exportar CSV do turno...", null, (s, e) => Dialogos.ExportarCsvComDialogo(this, _servico));
         mArquivo.DropDownItems.Add(new ToolStripSeparator());
         mArquivo.DropDownItems.Add("Sair", null, (s, e) => Close());
 
@@ -187,7 +188,7 @@ public sealed class FormVendas : Form
     private StatusStrip CriarStatusStrip()
     {
         var st = new StatusStrip { SizingGrip = false, Font = new Font("Segoe UI", 10F) };
-        var atalhos = new ToolStripStatusLabel("[Letra] Categoria + [Nº] Item + [Enter] Adiciona   |   [F2] Pagar   [Esc] Limpa   [F9] Fechamento   [F12] Impressora")
+        var atalhos = new ToolStripStatusLabel("[Letra]+[Nº]+[Enter] Adiciona   |   [Del] Remove item   |   [F2] Pagar   [Esc] Cancela venda   [F9] Fechamento   [F12] Impressora")
         { Spring = true, TextAlign = ContentAlignment.MiddleLeft };
 
         _stBd.Text = "BD: --";
@@ -287,11 +288,32 @@ public sealed class FormVendas : Form
         // botao visivel de correcao de pedido (alem de Delete/Backspace na grid)
         var btnRemover = new Button
         {
-            Text = "Remover Item Selecionado (Del)", Dock = DockStyle.Top, Height = 34,
+            Text = "🗑  Remover Item Selecionado (Del)", Dock = DockStyle.Top, Height = 40,
             BackColor = Color.FromArgb(200, 120, 40), ForeColor = Color.White,
-            FlatStyle = FlatStyle.Flat, Font = new Font("Segoe UI", 10F, FontStyle.Bold), TabStop = false
+            FlatStyle = FlatStyle.Flat, Font = new Font("Segoe UI", 11F, FontStyle.Bold), TabStop = false
         };
         btnRemover.Click += (s, e) => RemoverSelecionado();
+
+        // ALEM do botao: clicar com o BOTAO DIREITO na linha, ou dar DUPLO-CLIQUE, remove o
+        // item — a remocao deixa de ficar "amarrada" so ao botao Cancelar/Del.
+        var menuGrid = new ContextMenuStrip();
+        var miRemover = new ToolStripMenuItem("Remover este item")
+        {
+            Font = new Font("Segoe UI", 11F, FontStyle.Bold),
+            ShortcutKeyDisplayString = "Del"   // mostra o atalho ao lado (informativo)
+        };
+        miRemover.Click += (s, e) => RemoverSelecionado();
+        menuGrid.Items.Add(miRemover);
+        menuGrid.Items.Add("Cancelar venda (limpar tudo)", null, (s, e) => LimparCarrinho());
+        _grid.ContextMenuStrip = menuGrid;
+        // botao direito seleciona a linha sob o cursor antes de abrir o menu (age no item certo)
+        _grid.MouseDown += (s, e) =>
+        {
+            if (e.Button != MouseButtons.Right) return;
+            var hit = _grid.HitTest(e.X, e.Y);
+            if (hit.RowIndex >= 0) _grid.CurrentCell = _grid.Rows[hit.RowIndex].Cells[0];
+        };
+        _grid.CellDoubleClick += (s, e) => { if (e.RowIndex >= 0) RemoverSelecionado(); };
 
         // Dock: fill primeiro, depois bordas (cab fica no topo; btnRemover logo abaixo)
         painel.Controls.Add(gridHost);
@@ -592,7 +614,17 @@ public sealed class FormVendas : Form
 
     private void LimparCarrinho()
     {
-        if (_servico.Carrinho.Itens.Count == 0) return;
+        int n = _servico.Carrinho.Itens.Count;
+        if (n == 0) return;
+
+        // CONFIRMACAO: cancelar a venda inteira apaga o carrinho — pede um OK para nao perder
+        // o pedido por um ESC/clique acidental. (Remover 1 item nao passa por aqui.)
+        var r = MessageBox.Show(
+            $"Cancelar a venda e limpar o carrinho ({n} item(ns))?",
+            "Cancelar venda", MessageBoxButtons.OKCancel, MessageBoxIcon.Warning,
+            MessageBoxDefaultButton.Button2);   // default = Cancelar (nao apaga sem querer)
+        if (r != DialogResult.OK) return;
+
         _servico.Carrinho.Limpar();
         AtualizarCarrinho();
     }

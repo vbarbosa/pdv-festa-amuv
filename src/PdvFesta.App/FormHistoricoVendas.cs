@@ -73,6 +73,7 @@ public sealed class FormHistoricoVendas : Form
 
         var barra = new FlowLayoutPanel { Dock = DockStyle.Bottom, Height = 60, Padding = new Padding(10) };
         barra.Controls.Add(Botao("Atualizar (F5)", Color.FromArgb(70, 70, 90), (s, e) => Carregar()));
+        barra.Controls.Add(Botao("Exportar CSV", Color.FromArgb(0, 120, 60), (s, e) => Dialogos.ExportarCsvComDialogo(this, _servico)));
         // Reimprimir: para vendas feitas SEM impressora (ex: comecou a festa sem cabo),
         // depois de configurar a impressora o operador reimprime a nota daqui.
         var btnReimprimir = Botao("Reimprimir Nota", Color.FromArgb(0, 110, 60), (s, e) => Reimprimir());

@@ -219,6 +219,26 @@ public sealed class Servico : IDisposable
         return Repo.ListarVendasPorCaixa(TurnoAtual.Id);
     }
 
+    /// <summary>
+    /// Exporta o turno atual em DOIS CSVs numa pasta (resumo + lista detalhada de vendas),
+    /// a QUALQUER momento (nao precisa fechar o caixa). Retorna os caminhos gerados.
+    /// 'prefixo' compoe o nome dos arquivos (ex: "festa-20260704-1930").
+    /// </summary>
+    public (string resumo, string vendas) ExportarCsvTurno(string pastaDestino, string prefixo)
+    {
+        Directory.CreateDirectory(pastaDestino);
+        var resumo = ResumoTurnoAtual();
+        var itens = ItensVendidosTurno();
+        var vendas = VendasDoTurno();
+
+        var pResumo = Path.Combine(pastaDestino, $"{prefixo}_resumo.csv");
+        var pVendas = Path.Combine(pastaDestino, $"{prefixo}_vendas.csv");
+        var utf8Bom = new System.Text.UTF8Encoding(true);   // BOM: Excel abre com acento certo
+        File.WriteAllText(pResumo, ExportadorCsv.Resumo(resumo, itens), utf8Bom);
+        File.WriteAllText(pVendas, ExportadorCsv.Vendas(vendas), utf8Bom);
+        return (pResumo, pVendas);
+    }
+
     /// <summary>Estorna (cancela) uma venda: soft delete + rastro no log.</summary>
     public void CancelarVenda(long vendaId)
     {
