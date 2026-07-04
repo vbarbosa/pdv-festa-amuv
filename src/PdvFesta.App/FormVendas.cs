@@ -782,7 +782,12 @@ public sealed class FormVendas : Form
     {
         if (!Dialogos.LiberarAcao(this, _servico, AcaoProtegida.GerenciarPromocoes)) return;
         Dialogos.Modal(this, () => new FormPromocoes(_servico));
-        _servico.RecarregarPromocoes();   // novas regras valem no proximo item
+        // ao voltar: recarrega as regras E REAVALIA o carrinho atual — se o operador cadastrou
+        // uma promo cujos itens ja estao no carrinho, o desconto aparece NA HORA (nao so no
+        // proximo item adicionado).
+        _servico.RecarregarPromocoes();
+        _servico.AplicarPromocoes();
+        AtualizarCarrinho();
     }
 
     private void AbrirConfigImpressora()
