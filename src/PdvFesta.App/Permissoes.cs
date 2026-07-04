@@ -14,6 +14,7 @@ public enum AcaoProtegida
     GerenciarPromocoes,
     EstornarVenda,
     Backup,
+    ExportarCsv,      // exportar dados/relatorios (CSV) do turno
     ConfigImpressora,
     LayoutCupom,
     Permissoes,       // a propria tela de permissoes SEMPRE exige senha (nao configuravel)
@@ -41,6 +42,7 @@ public sealed class Permissoes
         AcaoProtegida.GerenciarProdutos => true,
         AcaoProtegida.EstornarVenda => true,
         AcaoProtegida.Backup => true,
+        AcaoProtegida.ExportarCsv => true,  // dados financeiros saindo -> exige senha por padrao
         AcaoProtegida.Permissoes => true,   // sempre (reforcado em ExigeSenha)
         // configuracao leve -> liberada por padrao
         AcaoProtegida.GerenciarCategorias => false,
@@ -62,6 +64,7 @@ public sealed class Permissoes
         AcaoProtegida.GerenciarPromocoes => "Gerenciar promoções/combos",
         AcaoProtegida.EstornarVenda => "Estornar venda",
         AcaoProtegida.Backup => "Backup / Restauração",
+        AcaoProtegida.ExportarCsv => "Exportar CSV (relatórios)",
         AcaoProtegida.ConfigImpressora => "Configurar impressora",
         AcaoProtegida.LayoutCupom => "Layout do cupom",
         AcaoProtegida.Permissoes => "Tela de permissões",

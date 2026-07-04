@@ -250,6 +250,8 @@ public sealed class FormFechamento : Form
     /// </summary>
     private void ExportarCsv()
     {
+        if (!Dialogos.LiberarAcao(this, _servico, AcaoProtegida.ExportarCsv)) return;
+
         var desktop = Environment.GetFolderPath(Environment.SpecialFolder.DesktopDirectory);
         using var dlg = new SaveFileDialog
         {

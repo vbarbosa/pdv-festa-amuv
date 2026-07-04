@@ -30,10 +30,19 @@ public class PermissoesTests : IDisposable
     [InlineData(AcaoProtegida.EstornarVenda, true)]
     [InlineData(AcaoProtegida.Backup, true)]
     [InlineData(AcaoProtegida.SangriaSuprimento, true)]
+    [InlineData(AcaoProtegida.ExportarCsv, true)]
     public void Default_AcoesCriticas_ExigemSenha(AcaoProtegida acao, bool esperado)
     {
         Assert.Equal(esperado, Permissoes.PadraoExigeSenha(acao));
         Assert.Equal(esperado, _perm.ExigeSenha(acao));
+    }
+
+    [Fact]
+    public void ExportarCsv_Configuravel_PodeSerLiberada()
+    {
+        Assert.True(_perm.ExigeSenha(AcaoProtegida.ExportarCsv));   // padrao exige
+        _perm.Definir(AcaoProtegida.ExportarCsv, false);
+        Assert.False(_perm.ExigeSenha(AcaoProtegida.ExportarCsv));  // admin pode liberar
     }
 
     [Theory]

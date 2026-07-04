@@ -62,6 +62,9 @@ public static class Dialogos
     /// </summary>
     public static void ExportarCsvComDialogo(IWin32Window owner, Servico servico)
     {
+        // trava configuravel: exportar dados financeiros pode exigir senha de admin.
+        if (!LiberarAcao(owner, servico, AcaoProtegida.ExportarCsv)) return;
+
         using var dlg = new FolderBrowserDialog { Description = "Escolha a pasta para salvar os CSVs do turno" };
         var desktop = Environment.GetFolderPath(Environment.SpecialFolder.DesktopDirectory);
         if (Directory.Exists(desktop)) dlg.SelectedPath = desktop;

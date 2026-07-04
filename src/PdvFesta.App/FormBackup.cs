@@ -51,7 +51,7 @@ public sealed class FormBackup : Form
         {
             Dock = DockStyle.Fill, ColumnCount = 1, RowCount = 5, Padding = new Padding(14)
         };
-        raiz.RowStyles.Add(new RowStyle(SizeType.Absolute, 92));    // saude
+        raiz.RowStyles.Add(new RowStyle(SizeType.Absolute, 112));   // saude (3 linhas + titulo do box)
         raiz.RowStyles.Add(new RowStyle(SizeType.Absolute, 104));   // config (pasta + intervalos)
         raiz.RowStyles.Add(new RowStyle(SizeType.Absolute, 40));    // acoes principais
         raiz.RowStyles.Add(new RowStyle(SizeType.Percent, 100));    // lista de backups
@@ -71,9 +71,10 @@ public sealed class FormBackup : Form
     {
         var box = new GroupBox { Text = "Situação", Dock = DockStyle.Fill, Font = new Font("Segoe UI", 9.5F, FontStyle.Bold) };
         _lblSaude.Dock = DockStyle.Fill;
-        _lblSaude.Font = new Font("Segoe UI", 10F);
-        _lblSaude.Padding = new Padding(10, 6, 6, 6);
+        _lblSaude.Font = new Font("Segoe UI", 9.5F);
+        _lblSaude.Padding = new Padding(10, 4, 6, 4);
         _lblSaude.TextAlign = ContentAlignment.TopLeft;
+        _lblSaude.AutoEllipsis = true;   // caminho longo vira "..." em vez de cortar/vazar
         box.Controls.Add(_lblSaude);
         return box;
     }
