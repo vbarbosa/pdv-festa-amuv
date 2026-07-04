@@ -229,11 +229,13 @@ public sealed class FormPagamento : Form
     {
         switch (e.KeyCode)
         {
-            case Keys.D: SelecionarForma(FormaPagamento.Dinheiro); e.Handled = true; break;
-            case Keys.P: SelecionarForma(FormaPagamento.Pix); e.Handled = true; break;
-            case Keys.B: SelecionarForma(FormaPagamento.CartaoDebito); e.Handled = true; break;
-            case Keys.C: SelecionarForma(FormaPagamento.CartaoCredito); e.Handled = true; break;
-            case Keys.Enter: Confirmar(); e.Handled = true; break;
+            // atalhos de forma de pagamento: SuppressKeyPress impede a LETRA de ser digitada
+            // no campo de valor recebido (ex: apertar "P" escrevia "p7,00").
+            case Keys.D: SelecionarForma(FormaPagamento.Dinheiro); e.Handled = e.SuppressKeyPress = true; break;
+            case Keys.P: SelecionarForma(FormaPagamento.Pix); e.Handled = e.SuppressKeyPress = true; break;
+            case Keys.B: SelecionarForma(FormaPagamento.CartaoDebito); e.Handled = e.SuppressKeyPress = true; break;
+            case Keys.C: SelecionarForma(FormaPagamento.CartaoCredito); e.Handled = e.SuppressKeyPress = true; break;
+            case Keys.Enter: Confirmar(); e.Handled = e.SuppressKeyPress = true; break;
             case Keys.Escape: DialogResult = DialogResult.Cancel; Close(); break;
         }
     }

@@ -18,6 +18,10 @@ public sealed class FormBackup : Form
     private readonly TextBox _txtPasta = new();
     private readonly NumericUpDown _numMin = new();
     private readonly NumericUpDown _numManter = new();
+    private readonly NumericUpDown _numVendas = new();
+    private readonly CheckBox _chkFechar = new();
+    private readonly CheckBox _chkAbrir = new();
+    private readonly CheckBox _chkSair = new();
     private readonly Label _lblSaude = new();
     private readonly ListView _lista = new();
     private readonly Label _lblStatus = new();
@@ -30,8 +34,8 @@ public sealed class FormBackup : Form
         Icon = Marca.Icone();
         StartPosition = FormStartPosition.CenterParent;
         FormBorderStyle = FormBorderStyle.Sizable;
-        MinimumSize = new Size(640, 600);
-        ClientSize = new Size(680, 640);
+        MinimumSize = new Size(660, 700);
+        ClientSize = new Size(700, 740);
         Font = new Font("Segoe UI", 11F);
 
         MontarLayout();
@@ -52,7 +56,7 @@ public sealed class FormBackup : Form
             Dock = DockStyle.Fill, ColumnCount = 1, RowCount = 5, Padding = new Padding(14)
         };
         raiz.RowStyles.Add(new RowStyle(SizeType.Absolute, 112));   // saude (3 linhas + titulo do box)
-        raiz.RowStyles.Add(new RowStyle(SizeType.Absolute, 104));   // config (pasta + intervalos)
+        raiz.RowStyles.Add(new RowStyle(SizeType.Absolute, 196));   // config (pasta + gatilhos)
         raiz.RowStyles.Add(new RowStyle(SizeType.Absolute, 40));    // acoes principais
         raiz.RowStyles.Add(new RowStyle(SizeType.Percent, 100));    // lista de backups
         raiz.RowStyles.Add(new RowStyle(SizeType.Absolute, 60));    // acoes da lista + status
@@ -95,19 +99,54 @@ public sealed class FormBackup : Form
         btnEscolher.Click += (s, e) => EscolherPasta();
         t.Controls.Add(btnEscolher, 2, 1);
 
-        // linha de intervalos: auto-backup + quantos manter
-        var linhaInt = new FlowLayoutPanel { Dock = DockStyle.Fill, AutoSize = true, Margin = new Padding(0, 4, 0, 0) };
-        linhaInt.Controls.Add(new Label { Text = "Auto a cada (min):", AutoSize = true, Margin = new Padding(0, 8, 4, 0) });
-        _numMin.Width = 70; _numMin.Minimum = 0; _numMin.Maximum = 1440; _numMin.Font = new Font("Segoe UI", 11F, FontStyle.Bold);
-        linhaInt.Controls.Add(_numMin);
-        linhaInt.Controls.Add(new Label { Text = "Manter últimos:", AutoSize = true, Margin = new Padding(16, 8, 4, 0) });
+        // titulo dos gatilhos
+        var lblGat = new Label { Text = "Quando fazer backup automático (marque os que quiser):",
+            Dock = DockStyle.Fill, TextAlign = ContentAlignment.MiddleLeft, Font = new Font("Segoe UI", 9.5F, FontStyle.Bold) };
+        t.Controls.Add(lblGat, 0, 2); t.SetColumnSpan(lblGat, 3);
+
+        // painel dos gatilhos (numeros + checkboxes) — empilhado
+        var g = new FlowLayoutPanel { Dock = DockStyle.Fill, FlowDirection = FlowDirection.TopDown, WrapContents = false, AutoScroll = true };
+
+        // linha 1: a cada N minutos (ate 7 dias = 10080 min) + a cada N vendas
+        var l1 = new FlowLayoutPanel { AutoSize = true, Margin = new Padding(0, 2, 0, 0) };
+        l1.Controls.Add(new Label { Text = "A cada (min):", AutoSize = true, Margin = new Padding(0, 8, 4, 0) });
+        _numMin.Width = 84; _numMin.Minimum = 0; _numMin.Maximum = 10080; _numMin.Font = new Font("Segoe UI", 11F, FontStyle.Bold);
+        l1.Controls.Add(_numMin);
+        l1.Controls.Add(new Label { Text = "(0=desl., até 10080 = 7 dias)", AutoSize = true, Margin = new Padding(4, 8, 0, 0), ForeColor = Color.Gray });
+        g.Controls.Add(l1);
+
+        var l2 = new FlowLayoutPanel { AutoSize = true, Margin = new Padding(0, 2, 0, 0) };
+        l2.Controls.Add(new Label { Text = "A cada N vendas:", AutoSize = true, Margin = new Padding(0, 8, 4, 0) });
+        _numVendas.Width = 84; _numVendas.Minimum = 0; _numVendas.Maximum = 9999; _numVendas.Font = new Font("Segoe UI", 11F, FontStyle.Bold);
+        l2.Controls.Add(_numVendas);
+        l2.Controls.Add(new Label { Text = "(0=desl.)", AutoSize = true, Margin = new Padding(4, 8, 0, 0), ForeColor = Color.Gray });
+        g.Controls.Add(l2);
+
+        // checkboxes de eventos
+        _chkFechar.Text = "Ao fechar o caixa (fim de turno)"; _chkFechar.AutoSize = true; _chkFechar.Margin = new Padding(0, 4, 0, 0);
+        _chkAbrir.Text = "Ao abrir o programa"; _chkAbrir.AutoSize = true; _chkAbrir.Margin = new Padding(0, 2, 0, 0);
+        _chkSair.Text = "Ao sair do programa"; _chkSair.AutoSize = true; _chkSair.Margin = new Padding(0, 2, 0, 0);
+        g.Controls.Add(_chkFechar);
+        g.Controls.Add(_chkAbrir);
+        g.Controls.Add(_chkSair);
+
+        // linha final: manter ultimos + aplicar
+        var l3 = new FlowLayoutPanel { AutoSize = true, Margin = new Padding(0, 6, 0, 0) };
+        l3.Controls.Add(new Label { Text = "Manter últimos:", AutoSize = true, Margin = new Padding(0, 8, 4, 0) });
         _numManter.Width = 70; _numManter.Minimum = 0; _numManter.Maximum = 999; _numManter.Font = new Font("Segoe UI", 11F, FontStyle.Bold);
-        linhaInt.Controls.Add(_numManter);
-        var btnAplicar = Botao("Aplicar", Color.FromArgb(0, 120, 200));
-        btnAplicar.Margin = new Padding(16, 2, 0, 2);
+        l3.Controls.Add(_numManter);
+        var btnAplicar = Botao("Aplicar configurações", Color.FromArgb(0, 120, 200));
+        btnAplicar.Width = 200; btnAplicar.Margin = new Padding(16, 2, 0, 2);
         btnAplicar.Click += (s, e) => AplicarConfig();
-        linhaInt.Controls.Add(btnAplicar);
-        t.Controls.Add(linhaInt, 0, 2); t.SetColumnSpan(linhaInt, 3);
+        l3.Controls.Add(btnAplicar);
+        g.Controls.Add(l3);
+
+        t.Controls.Add(g, 0, 3); t.SetColumnSpan(g, 3);
+        t.RowStyles.Add(new RowStyle(SizeType.Absolute, 24));   // pasta label
+        t.RowStyles.Add(new RowStyle(SizeType.Absolute, 30));   // pasta textbox
+        t.RowStyles.Add(new RowStyle(SizeType.Absolute, 24));   // titulo gatilhos
+        t.RowStyles.Add(new RowStyle(SizeType.Percent, 100));   // gatilhos
+        t.RowCount = 4;
         return t;
     }
 
@@ -176,8 +215,12 @@ public sealed class FormBackup : Form
     private void Carregar()
     {
         _txtPasta.Text = _servico.PastaBackup;
-        _numMin.Value = Math.Clamp(_servico.IntervaloBackupMin, 0, 1440);
+        _numMin.Value = Math.Clamp(_servico.IntervaloBackupMin, 0, 10080);
+        _numVendas.Value = Math.Clamp(_servico.BackupACadaVendas, 0, 9999);
         _numManter.Value = Math.Clamp(_servico.BackupsManter, 0, 999);
+        _chkFechar.Checked = _servico.BackupAoFecharCaixa;
+        _chkAbrir.Checked = _servico.BackupAoAbrirApp;
+        _chkSair.Checked = _servico.BackupAoSairApp;
         AtualizarSaude();
         AtualizarLista();
     }
@@ -237,10 +280,22 @@ public sealed class FormBackup : Form
     private void AplicarConfig()
     {
         _servico.DefinirIntervaloBackup((int)_numMin.Value);
+        _servico.DefinirBackupACadaVendas((int)_numVendas.Value);
         _servico.DefinirBackupsManter((int)_numManter.Value);
-        Info(_numMin.Value == 0
-            ? $"Auto-backup DESLIGADO. Mantendo últimos {(int)_numManter.Value}."
-            : $"Auto-backup a cada {(int)_numMin.Value} min. Mantendo últimos {(int)_numManter.Value}.",
+        _servico.DefinirBackupAoFecharCaixa(_chkFechar.Checked);
+        _servico.DefinirBackupAoAbrirApp(_chkAbrir.Checked);
+        _servico.DefinirBackupAoSairApp(_chkSair.Checked);
+
+        // resume os gatilhos ligados
+        var ligados = new List<string>();
+        if (_numMin.Value > 0) ligados.Add($"a cada {(int)_numMin.Value} min");
+        if (_numVendas.Value > 0) ligados.Add($"a cada {(int)_numVendas.Value} vendas");
+        if (_chkFechar.Checked) ligados.Add("ao fechar caixa");
+        if (_chkAbrir.Checked) ligados.Add("ao abrir");
+        if (_chkSair.Checked) ligados.Add("ao sair");
+        Info(ligados.Count == 0
+            ? $"Backup automático DESLIGADO. Mantendo últimos {(int)_numManter.Value}."
+            : $"Backup: {string.Join(" + ", ligados)}. Mantendo últimos {(int)_numManter.Value}.",
             Color.FromArgb(0, 120, 0));
     }
 

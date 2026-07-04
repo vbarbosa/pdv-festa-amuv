@@ -68,6 +68,45 @@ public sealed class Servico : IDisposable
     /// <summary>Quantos backups manter ao limpar antigos (0 = manter todos). Padrao 10.</summary>
     public int BackupsManter => int.TryParse(Repo.LerConfig("backup_manter", "10"), out var n) ? n : 10;
     public void DefinirBackupsManter(int n) => Repo.SalvarConfig("backup_manter", Math.Max(0, n).ToString());
+
+    // ----- GATILHOS de backup automatico (o operador liga/desliga cada um na tela) -----
+    /// <summary>Backup a cada N vendas concluidas (0 = desligado).</summary>
+    public int BackupACadaVendas => int.TryParse(Repo.LerConfig("backup_a_cada_vendas", "0"), out var n) ? n : 0;
+    public void DefinirBackupACadaVendas(int n) => Repo.SalvarConfig("backup_a_cada_vendas", Math.Max(0, n).ToString());
+    /// <summary>Backup automatico ao fechar o caixa (padrao: ligado).</summary>
+    public bool BackupAoFecharCaixa => Repo.LerConfig("backup_ao_fechar", "1") == "1";
+    public void DefinirBackupAoFecharCaixa(bool v) => Repo.SalvarConfig("backup_ao_fechar", v ? "1" : "0");
+    /// <summary>Backup ao abrir o app (padrao: desligado).</summary>
+    public bool BackupAoAbrirApp => Repo.LerConfig("backup_ao_abrir_app", "0") == "1";
+    public void DefinirBackupAoAbrirApp(bool v) => Repo.SalvarConfig("backup_ao_abrir_app", v ? "1" : "0");
+    /// <summary>Backup ao sair do app (padrao: desligado).</summary>
+    public bool BackupAoSairApp => Repo.LerConfig("backup_ao_sair_app", "0") == "1";
+    public void DefinirBackupAoSairApp(bool v) => Repo.SalvarConfig("backup_ao_sair_app", v ? "1" : "0");
+
+    private int _vendasDesdeBackup;   // contador para o gatilho "a cada N vendas"
+
+    /// <summary>
+    /// Faz um backup .zip na pasta configurada e limpa antigos. Best-effort: NUNCA lanca
+    /// (backup nao pode derrubar o caixa). 'motivo' vai para o log. Retorna true se gerou.
+    /// </summary>
+    public bool FazerBackupAutomatico(string motivo)
+    {
+        var pasta = PastaBackup;
+        if (string.IsNullOrWhiteSpace(pasta)) return false;   // sem pasta -> nada a fazer
+        try
+        {
+            var zip = BackupManager.GerarZip(CaminhoBanco, pasta);
+            Log.Info($"Backup automatico ({motivo}): {System.IO.Path.GetFileName(zip)}");
+            int manter = BackupsManter;
+            if (manter > 0)
+            {
+                int apagados = BackupManager.LimparAntigos(pasta, manter);
+                if (apagados > 0) Log.Info($"Backup: {apagados} antigo(s) apagado(s) (mantendo {manter}).");
+            }
+            return true;
+        }
+        catch (Exception ex) { Log.Aviso($"Backup automatico ({motivo}) falhou: {ex.Message}"); return false; }
+    }
     /// <summary>Total de vendas no banco (para o resumo de "saude" da tela de backup).</summary>
     public int TotalVendas() => Repo.ListarVendas().Count;
 
@@ -145,26 +184,7 @@ public sealed class Servico : IDisposable
 
         // BACKUP AUTOMATICO ao fechar o caixa: fim de turno e o momento natural para garantir
         // os dados do dia. Best-effort: nunca derruba o fechamento se o backup falhar.
-        BackupAutomaticoAoFechar();
-    }
-
-    /// <summary>Gera backup ao fechar o caixa e limpa antigos (se ha pasta configurada).</summary>
-    private void BackupAutomaticoAoFechar()
-    {
-        var pasta = PastaBackup;
-        if (string.IsNullOrWhiteSpace(pasta)) return;   // sem pasta -> nao faz (nada a fazer)
-        try
-        {
-            var zip = BackupManager.GerarZip(CaminhoBanco, pasta);
-            Log.Info($"Backup automatico (fechamento) gerado: {zip}");
-            int manter = BackupsManter;
-            if (manter > 0)
-            {
-                int apagados = BackupManager.LimparAntigos(pasta, manter);
-                if (apagados > 0) Log.Info($"Backup: {apagados} antigo(s) apagado(s) (mantendo {manter}).");
-            }
-        }
-        catch (Exception ex) { Log.Aviso($"Backup automatico ao fechar falhou: {ex.Message}"); }
+        if (BackupAoFecharCaixa) FazerBackupAutomatico("fechamento de caixa");
     }
 
     /// <summary>
@@ -211,6 +231,29 @@ public sealed class Servico : IDisposable
         if (TurnoAtual is null) return new();
         return Caixa.ContarItens(Repo.ListarVendasPorCaixa(TurnoAtual.Id));
     }
+
+    /// <summary>
+    /// VISAO GERENCIAL GLOBAL: consolida TODOS os turnos (abertos e fechados) com seu resumo
+    /// financeiro (fundo, vendas por forma, sangrias/suprimentos, gaveta). Do mais recente ao
+    /// mais antigo. Base do "Balanco Geral" (livro-caixa) para o administrador.
+    /// </summary>
+    public List<ResumoTurno> ConsolidarTodosOsTurnos()
+    {
+        var lista = new List<ResumoTurno>();
+        foreach (var t in Repo.ListarTurnos())
+        {
+            var vendas = Repo.ListarVendasPorCaixa(t.Id);
+            var movs = Repo.ListarMovimentos(t.Id);
+            lista.Add(Caixa.ConsolidarTurno(t, vendas, movs));
+        }
+        return lista;
+    }
+
+    /// <summary>Movimentos (sangria/suprimento) de um turno especifico (para o detalhe do balanco).</summary>
+    public List<MovimentoCaixa> MovimentosDoTurno(long caixaId) => Repo.ListarMovimentos(caixaId);
+
+    /// <summary>Vendas de um turno especifico (para o detalhe do balanco).</summary>
+    public List<Venda> VendasDoCaixa(long caixaId) => Repo.ListarVendasPorCaixa(caixaId);
 
     /// <summary>Vendas do turno atual (para a tela de historico/estorno).</summary>
     public List<Venda> VendasDoTurno()
@@ -263,6 +306,14 @@ public sealed class Servico : IDisposable
         // 2) imprime (se falhar, a venda ja esta salva; operador pode reimprimir)
         var (ok, msg) = ImprimirVenda(venda);
         if (!ok) Log.Aviso($"Impressao falhou venda #{venda.Id}: {msg}");
+
+        // 3) GATILHO: backup a cada N vendas (protege por volume, nao so por tempo)
+        int aCada = BackupACadaVendas;
+        if (aCada > 0 && ++_vendasDesdeBackup >= aCada)
+        {
+            _vendasDesdeBackup = 0;
+            FazerBackupAutomatico($"a cada {aCada} vendas");
+        }
         return (venda, ok, msg);
     }
 
@@ -280,11 +331,12 @@ public sealed class Servico : IDisposable
     private bool ModoDemo => ImpressaoSimulada || Environment.GetEnvironmentVariable("PDV_DEMO") == "1";
 
     /// <summary>
-    /// Imprime (ou reimprime) o cupom de uma venda usando o layout configurado.
+    /// Imprime (ou reimprime) o cupom de uma venda. Se <paramref name="modo"/> for informado,
+    /// usa ESSE modo de cupom (o operador escolheu na reimpressao); senao usa a config global.
     /// SEGURANCA: nao imprime venda CANCELADA (estornada). Ao imprimir com sucesso, registra
     /// a impressao (contador de vias) para o Historico mostrar quantas vezes a nota saiu.
     /// </summary>
-    public (bool ok, string msg) ImprimirVenda(Venda venda)
+    public (bool ok, string msg) ImprimirVenda(Venda venda, ModoCupom? modo = null)
     {
         if (venda.Cancelada)
             return (false, "Venda CANCELADA (estornada) nao pode ser reimpressa.");
@@ -292,7 +344,9 @@ public sealed class Servico : IDisposable
         var impressora = ImpressoraPadrao;
         if (string.IsNullOrWhiteSpace(impressora))
             return (false, "Nenhuma impressora configurada (F12).");
-        var (ok, msg) = EscPosPrinter.ImprimirTicket(impressora, venda, LerConfigCupom());
+        var cfg = LerConfigCupom();
+        if (modo is ModoCupom m) cfg.Modo = m;   // reimpressao com tipo escolhido pelo operador
+        var (ok, msg) = EscPosPrinter.ImprimirTicket(impressora, venda, cfg);
         if (ok) venda.Impressoes = Repo.RegistrarImpressao(venda.Id);   // conta 1a via + reimpressoes
         return (ok, msg);
     }

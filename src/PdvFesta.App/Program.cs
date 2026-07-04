@@ -37,7 +37,9 @@ internal static class Program
         try
         {
             using var servico = new Servico(dbPath, cardapioPath);
+            if (servico.BackupAoAbrirApp) servico.FazerBackupAutomatico("abertura do app");
             Application.Run(new FormVendas(servico));
+            if (servico.BackupAoSairApp) servico.FazerBackupAutomatico("saida do app");
             Log.Info("===== PDV encerrado normalmente =====");
         }
         catch (Exception ex)

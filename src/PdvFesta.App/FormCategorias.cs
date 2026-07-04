@@ -63,9 +63,9 @@ public sealed class FormCategorias : Form
         painel.Controls.Add(new Label { Text = "Ordem:", Dock = DockStyle.Fill, TextAlign = ContentAlignment.MiddleLeft }, 0, 2);
         painel.Controls.Add(_numOrdem, 1, 2);
 
-        _chkAtivo.Text = "Ativa (aparece no caixa)"; _chkAtivo.Dock = DockStyle.Fill; _chkAtivo.Checked = true;
-        painel.Controls.Add(new Label { Text = "", Width = 1 }, 0, 3);
-        painel.Controls.Add(_chkAtivo, 1, 3);
+        _chkAtivo.Text = "Ativa (aparece no caixa)"; _chkAtivo.AutoSize = true; _chkAtivo.Checked = true;
+        painel.Controls.Add(_chkAtivo, 0, 3);
+        painel.SetColumnSpan(_chkAtivo, 2);   // ocupa as 2 colunas -> texto nao corta
 
         painel.Controls.Add(Botao("Nova", Color.FromArgb(70, 70, 90), (s, e) => NovaCategoria()), 0, 4);
         painel.Controls.Add(Botao("Salvar / Atualizar", Color.FromArgb(0, 130, 0), (s, e) => Salvar()), 1, 4);

@@ -51,6 +51,40 @@ public class DashboardDadosTests : IDisposable
     }
 
     [Fact]
+    public void CanceladasDoTurno_ContadasSeparado_ForaDoFaturamento()
+    {
+        _servico.AbrirCaixa(0, "op");
+        Vender("q", "Quentao", 700, 1, FormaPagamento.Dinheiro);
+        Vender("r", "Refri", 600, 1, FormaPagamento.Dinheiro);
+
+        // cancela a 1a venda
+        var venda = _servico.VendasDoTurno().First();
+        _servico.CancelarVenda(venda.Id);
+
+        var vendas = _servico.VendasDoTurno();
+        int canceladas = vendas.Count(v => v.Cancelada);
+        Assert.Equal(1, canceladas);                                 // painel mostra 1 cancelada
+
+        var r = _servico.ResumoTurnoAtual();
+        Assert.Equal(1, r.Vendas.QuantidadeVendas);                  // so a valida conta
+        Assert.Equal(600, r.Vendas.FaturamentoBrutoCentavos);        // cancelada fora do faturamento
+    }
+
+    [Fact]
+    public void SangriaESuprimento_AjustamGavetaDoTurno()
+    {
+        _servico.AbrirCaixa(10000, "op");                            // fundo R$100
+        Vender("q", "Quentao", 700, 1, FormaPagamento.Dinheiro);    // +7 -> gaveta 107
+        _servico.RegistrarMovimento(TipoMovimento.Suprimento, 5000, "troco");   // +50 -> 157
+        _servico.RegistrarMovimento(TipoMovimento.Sangria, 3000, "cofre");      // -30 -> 127
+
+        var r = _servico.ResumoTurnoAtual();
+        Assert.Equal(5000, r.SuprimentosCentavos);
+        Assert.Equal(3000, r.SangriasCentavos);
+        Assert.Equal(10000 + 700 + 5000 - 3000, r.TotalGavetaCentavos);   // 127,00
+    }
+
+    [Fact]
     public void ItensVendidosTurno_AgrupadoEOrdenadoPorValor()
     {
         _servico.AbrirCaixa(0, "op");

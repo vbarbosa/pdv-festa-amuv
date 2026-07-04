@@ -166,7 +166,12 @@ public sealed class FormHistoricoVendas : Form
             return;
         }
 
-        var (ok, msg) = _servico.ImprimirVenda(venda);
+        // PERGUNTA o tipo de cupom (o operador escolhe na hora, sem ficar preso a config global)
+        var padrao = _servico.LerConfigCupom().Modo;
+        using var dlg = new DialogoTipoCupom(padrao);
+        if (dlg.ShowDialog(this) != DialogResult.OK || dlg.Escolhido is null) return;
+
+        var (ok, msg) = _servico.ImprimirVenda(venda, dlg.Escolhido);
         if (ok)
         {
             Carregar();   // atualiza o contador de impressoes na tela

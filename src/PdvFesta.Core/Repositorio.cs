@@ -801,6 +801,20 @@ FROM caixa WHERE status = 0 ORDER BY id DESC LIMIT 1;";
         return r.Read() ? LerTurno(r) : null;
     }
 
+    /// <summary>TODOS os turnos (abertos e fechados), do mais recente ao mais antigo.</summary>
+    public List<Turno> ListarTurnos()
+    {
+        using var conn = Abrir();
+        using var cmd = conn.CreateCommand();
+        cmd.CommandText = @"
+SELECT id, abertura, fechamento, fundo_cent, operador, status
+FROM caixa ORDER BY id DESC;";
+        using var r = cmd.ExecuteReader();
+        var lista = new List<Turno>();
+        while (r.Read()) lista.Add(LerTurno(r));
+        return lista;
+    }
+
     private static Turno LerTurno(SqliteDataReader r) => new()
     {
         Id = r.GetInt64(0),

@@ -147,32 +147,34 @@ public sealed class FormVendas : Form
         var menu = new MenuStrip { Font = new Font("Segoe UI", 10F) };
 
         var mArquivo = new ToolStripMenuItem("&Arquivo");
-        mArquivo.DropDownItems.Add("Abrir Caixa...", null, (s, e) => AbrirCaixaMenu());
-        mArquivo.DropDownItems.Add("Trocar Operador...", null, (s, e) => AbrirTrocaOperador());
+        mArquivo.DropDownItems.Add(Item("Abrir Caixa", Keys.F7, (s, e) => AbrirCaixaMenu()));
+        mArquivo.DropDownItems.Add(Item("Trocar Operador", Keys.Control | Keys.T, (s, e) => AbrirTrocaOperador()));
         mArquivo.DropDownItems.Add(Item("Painel em Tempo Real", Keys.F4, (s, e) => AbrirDashboard()));
         mArquivo.DropDownItems.Add(Item("Histórico de Vendas", Keys.F3, (s, e) => AbrirHistorico()));
+        mArquivo.DropDownItems.Add(Item("Balanço Geral (todos os caixas)", Keys.F6, (s, e) => AbrirBalancoGeral()));
         mArquivo.DropDownItems.Add(Item("Fechamento de Caixa", Keys.F9, (s, e) => AbrirFechamento()));
-        mArquivo.DropDownItems.Add("Exportar CSV do turno...", null, (s, e) => Dialogos.ExportarCsvComDialogo(this, _servico));
+        mArquivo.DropDownItems.Add(Item("Exportar CSV do turno", Keys.Control | Keys.E, (s, e) => Dialogos.ExportarCsvComDialogo(this, _servico)));
         mArquivo.DropDownItems.Add(new ToolStripSeparator());
-        mArquivo.DropDownItems.Add("Sair", null, (s, e) => Close());
+        mArquivo.DropDownItems.Add(Item("Sair", Keys.Alt | Keys.F4, (s, e) => Close()));
 
         var mConfig = new ToolStripMenuItem("&Configurações");
-        mConfig.DropDownItems.Add("Gerenciar Produtos...", null, (s, e) => AbrirGerenciarProdutos());
-        mConfig.DropDownItems.Add("Gerenciar Categorias...", null, (s, e) => AbrirGerenciarCategorias());
-        mConfig.DropDownItems.Add("Gerenciar Promoções / Combos...", null, (s, e) => AbrirGerenciarPromocoes());
+        mConfig.DropDownItems.Add(Item("Gerenciar Produtos", Keys.Control | Keys.P, (s, e) => AbrirGerenciarProdutos()));
+        mConfig.DropDownItems.Add(Item("Gerenciar Categorias", Keys.Control | Keys.G, (s, e) => AbrirGerenciarCategorias()));
+        mConfig.DropDownItems.Add(Item("Gerenciar Promoções / Combos", Keys.Control | Keys.M, (s, e) => AbrirGerenciarPromocoes()));
         mConfig.DropDownItems.Add(Item("Gerenciar Impressora", Keys.F12, (s, e) => AbrirConfigImpressora()));
-        mConfig.DropDownItems.Add("Layout do Cupom...", null, (s, e) => AbrirLayoutCupom());
+        mConfig.DropDownItems.Add(Item("Layout do Cupom", Keys.Control | Keys.L, (s, e) => AbrirLayoutCupom()));
         mConfig.DropDownItems.Add(new ToolStripSeparator());
-        mConfig.DropDownItems.Add("Permissões e Senha...", null, (s, e) => AbrirPermissoes());
+        mConfig.DropDownItems.Add(Item("Permissões do Operador", Keys.Control | Keys.K, (s, e) => AbrirPermissoes()));
+        mConfig.DropDownItems.Add(Item("Trocar Senha do Admin", Keys.Control | Keys.H, (s, e) => AbrirTrocarSenha()));
 
         var mFerr = new ToolStripMenuItem("Ferramen&tas");
         mFerr.DropDownItems.Add(Item("Backup / Restauração", Keys.F8, (s, e) => AbrirBackup()));
         mFerr.DropDownItems.Add(new ToolStripSeparator());
-        mFerr.DropDownItems.Add("Sangria (retirada)...", null, (s, e) => AbrirMovimento(TipoMovimento.Sangria));
-        mFerr.DropDownItems.Add("Suprimento (entrada)...", null, (s, e) => AbrirMovimento(TipoMovimento.Suprimento));
+        mFerr.DropDownItems.Add(Item("Sangria (retirada)", Keys.Control | Keys.S, (s, e) => AbrirMovimento(TipoMovimento.Sangria)));
+        mFerr.DropDownItems.Add(Item("Suprimento (entrada)", Keys.Control | Keys.U, (s, e) => AbrirMovimento(TipoMovimento.Suprimento)));
 
         var mAjuda = new ToolStripMenuItem("A&juda");
-        mAjuda.DropDownItems.Add("Sobre...", null, (s, e) => Dialogos.Modal(this, () => new FormSobre()));
+        mAjuda.DropDownItems.Add(Item("Sobre", Keys.F1, (s, e) => Dialogos.Modal(this, () => new FormSobre())));
 
         menu.Items.AddRange(new ToolStripItem[] { mArquivo, mConfig, mFerr, mAjuda });
         MainMenuStrip = menu;
@@ -188,7 +190,7 @@ public sealed class FormVendas : Form
     private StatusStrip CriarStatusStrip()
     {
         var st = new StatusStrip { SizingGrip = false, Font = new Font("Segoe UI", 10F) };
-        var atalhos = new ToolStripStatusLabel("[Letra]+[Nº]+[Enter] Adiciona   |   [Del] Remove item   |   [F2] Pagar   [Esc] Cancela venda   [F9] Fechamento   [F12] Impressora")
+        var atalhos = new ToolStripStatusLabel("[Letra]+[Nº]+[Enter] Adiciona   |   [Del] Remove item   |   [F2] Pagar   |   [Esc] Cancela venda   |   [F9] Fechamento   |   [F12] Impressora")
         { Spring = true, TextAlign = ContentAlignment.MiddleLeft };
 
         _stBd.Text = "BD: --";
@@ -482,7 +484,10 @@ public sealed class FormVendas : Form
         // limpa qualquer destaque anterior em todas as abas
         foreach (var aba in _abaPorCategoria.Values)
             foreach (var btn in ProdutosDaAba(aba))
+            {
                 btn.FlatAppearance.BorderColor = Color.FromArgb(210, 210, 210);
+                btn.FlatAppearance.BorderSize = 1;
+            }
 
         if (_catSelecionada is null)
         {
@@ -498,6 +503,7 @@ public sealed class FormVendas : Form
             {
                 var alvo = botoes[_itemDestacado];
                 alvo.FlatAppearance.BorderColor = Marca.Vermelho;
+                alvo.FlatAppearance.BorderSize = 4;   // destaque de teclado bem grosso
                 var nome = _itensPorCategoria[_catSelecionada][_itemDestacado].Nome;
                 _stModo.Text = $"► {_catSelecionada} ({letra}) {_itemDestacado + 1}: {nome} — Enter adiciona";
                 return;
@@ -526,7 +532,23 @@ public sealed class FormVendas : Form
             Name = prefixoNome + p.Id        // AutomationId (btnProduto_ nas abas; btnProdutoTodos_ na aba Todos)
         };
         btn.FlatAppearance.BorderColor = Color.FromArgb(210, 210, 210);
+        btn.FlatAppearance.BorderSize = 1;
         btn.Click += (s, e) => AdicionarProduto(p);
+
+        // HOVER do mouse: borda GROSSA e colorida, para o operador enxergar bem onde esta.
+        // (nao mexe no item destacado por teclado, que tem seu proprio realce mais forte.)
+        btn.MouseEnter += (s, e) =>
+        {
+            if (btn.FlatAppearance.BorderColor == Marca.Vermelho) return;   // ja destacado por teclado
+            btn.FlatAppearance.BorderColor = Color.FromArgb(0, 120, 215);   // azul de foco
+            btn.FlatAppearance.BorderSize = 4;                              // grossinho
+        };
+        btn.MouseLeave += (s, e) =>
+        {
+            if (btn.FlatAppearance.BorderColor == Marca.Vermelho) return;   // preserva o destaque de teclado
+            btn.FlatAppearance.BorderColor = Color.FromArgb(210, 210, 210);
+            btn.FlatAppearance.BorderSize = 1;
+        };
 
         // badge com o NUMERO do item dentro da sua categoria (1..N). TODO item ganha um,
         // entao a sequencia "Letra da categoria + Numero" opera qualquer produto pelo teclado.
@@ -743,6 +765,13 @@ public sealed class FormVendas : Form
         Dialogos.Modal(this, () => new FormDashboard(_servico));
     }
 
+    // Balanco Geral: visao gerencial de TODOS os caixas -> pede senha de admin (dado sensivel).
+    private void AbrirBalancoGeral()
+    {
+        if (!Dialogos.LiberarAcao(this, _servico, AcaoProtegida.BalancoGeral)) return;
+        Dialogos.Modal(this, () => new FormBalancoGeral(_servico));
+    }
+
     private void AbrirTrocaOperador()
     {
         if (!_servico.CaixaAberto)
@@ -782,7 +811,12 @@ public sealed class FormVendas : Form
     {
         if (!Dialogos.LiberarAcao(this, _servico, AcaoProtegida.GerenciarPromocoes)) return;
         Dialogos.Modal(this, () => new FormPromocoes(_servico));
-        _servico.RecarregarPromocoes();   // novas regras valem no proximo item
+        // ao voltar: recarrega as regras E REAVALIA o carrinho atual — se o operador cadastrou
+        // uma promo cujos itens ja estao no carrinho, o desconto aparece NA HORA (nao so no
+        // proximo item adicionado).
+        _servico.RecarregarPromocoes();
+        _servico.AplicarPromocoes();
+        AtualizarCarrinho();
     }
 
     private void AbrirConfigImpressora()
@@ -809,6 +843,13 @@ public sealed class FormVendas : Form
         // a tela de permissoes SEMPRE exige senha (nao pode ser desligada).
         if (!Dialogos.LiberarAcao(this, _servico, AcaoProtegida.Permissoes)) return;
         Dialogos.Modal(this, () => new FormPermissoes(_servico));
+    }
+
+    private void AbrirTrocarSenha()
+    {
+        // trocar a senha do admin tambem exige a senha atual (dentro da propria tela).
+        if (!Dialogos.LiberarAcao(this, _servico, AcaoProtegida.Permissoes)) return;
+        Dialogos.Modal(this, () => new FormTrocarSenha(_servico));
     }
 
     private void AbrirMovimento(TipoMovimento tipo)

@@ -14,6 +14,7 @@ public sealed class FormMovimento : Form
     private readonly TipoMovimento _tipo;
     private readonly TextBox _txtValor = new();
     private readonly TextBox _txtMotivo = new();
+    private readonly Label _lblInfo = new();
 
     public FormMovimento(Servico servico, TipoMovimento tipo)
     {
@@ -27,7 +28,7 @@ public sealed class FormMovimento : Form
         StartPosition = FormStartPosition.CenterParent;
         FormBorderStyle = FormBorderStyle.FixedDialog;
         MaximizeBox = false; MinimizeBox = false;
-        ClientSize = new Size(420, 300);
+        ClientSize = new Size(440, 430);
         Font = new Font("Segoe UI", 11F);
         KeyPreview = true;
 
@@ -38,6 +39,14 @@ public sealed class FormMovimento : Form
             Font = new Font("Segoe UI", 14F, FontStyle.Bold), ForeColor = Color.White,
             BackColor = sangria ? Color.FromArgb(180, 60, 60) : Color.FromArgb(0, 130, 70)
         };
+
+        // PAINEL DE INFO do caixa atual (contexto antes de mexer no dinheiro)
+        _lblInfo.Dock = DockStyle.Top;
+        _lblInfo.Height = 128;
+        _lblInfo.Font = new Font("Consolas", 10.5F);
+        _lblInfo.TextAlign = ContentAlignment.TopLeft;
+        _lblInfo.Padding = new Padding(14, 8, 8, 8);
+        _lblInfo.BackColor = Color.FromArgb(245, 245, 245);
 
         var lblValor = new Label
         {
@@ -72,6 +81,7 @@ public sealed class FormMovimento : Form
         Controls.Add(lblMotivo);
         Controls.Add(_txtValor);
         Controls.Add(lblValor);
+        Controls.Add(_lblInfo);
         Controls.Add(titulo);
         Controls.Add(btn);
 
@@ -81,6 +91,29 @@ public sealed class FormMovimento : Form
             else if (e.KeyCode == Keys.Escape) { DialogResult = DialogResult.Cancel; Close(); }
         };
         Shown += (s, e) => { _txtValor.Focus(); _txtValor.SelectAll(); };
+        AtualizarInfo();
+    }
+
+    /// <summary>Mostra o contexto do caixa atual: turno, operador, fundo, movimentos e gaveta.</summary>
+    private void AtualizarInfo()
+    {
+        if (!_servico.CaixaAberto || _servico.TurnoAtual is null)
+        {
+            _lblInfo.Text = "Caixa FECHADO — abra o caixa antes de registrar movimento.";
+            _lblInfo.ForeColor = Color.FromArgb(180, 0, 0);
+            return;
+        }
+        var t = _servico.TurnoAtual;
+        var r = _servico.ResumoTurnoAtual();
+        string M(int c) => Dinheiro.Formatar(c);
+        _lblInfo.ForeColor = Color.FromArgb(40, 40, 40);
+        _lblInfo.Text =
+            $"Caixa #{t.Id}   Operador: {(string.IsNullOrWhiteSpace(t.Operador) ? "-" : t.Operador)}\n" +
+            $"Aberto: {t.Abertura:dd/MM HH:mm}\n" +
+            $"Fundo inicial ...... {M(r.FundoCentavos)}\n" +
+            $"(+) Suprimentos .... {M(r.SuprimentosCentavos)}\n" +
+            $"(-) Sangrias ....... {M(r.SangriasCentavos)}\n" +
+            $"= EM GAVETA AGORA .. {M(r.TotalGavetaCentavos)}";
     }
 
     private void Confirmar()

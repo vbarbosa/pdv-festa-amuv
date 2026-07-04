@@ -15,6 +15,7 @@ public sealed class FormDashboard : Form
     private readonly Label _lblGaveta = new();
     private readonly Label _lblBruto = new();
     private readonly Label _lblVendas = new();
+    private readonly Label _lblCanceladas = new();
     private readonly GraficoBarras _grafPagamentos = new();
     private readonly GraficoBarras _grafItens = new();
     private readonly System.Windows.Forms.Timer _timer = new();
@@ -53,12 +54,13 @@ public sealed class FormDashboard : Form
             BackColor = Color.FromArgb(60, 60, 60), Font = new Font("Segoe UI", 16F, FontStyle.Bold)
         };
 
-        // faixa de indicadores no topo
-        var faixa = new TableLayoutPanel { Dock = DockStyle.Top, Height = 110, ColumnCount = 3, RowCount = 1, Padding = new Padding(10) };
-        for (int i = 0; i < 3; i++) faixa.ColumnStyles.Add(new ColumnStyle(SizeType.Percent, 33.33f));
+        // faixa de indicadores no topo (4 cartoes)
+        var faixa = new TableLayoutPanel { Dock = DockStyle.Top, Height = 110, ColumnCount = 4, RowCount = 1, Padding = new Padding(10) };
+        for (int i = 0; i < 4; i++) faixa.ColumnStyles.Add(new ColumnStyle(SizeType.Percent, 25f));
         faixa.Controls.Add(Cartao("TOTAL EM GAVETA", _lblGaveta, Color.FromArgb(0, 130, 0)), 0, 0);
         faixa.Controls.Add(Cartao("FATURAMENTO", _lblBruto, Color.FromArgb(0, 100, 160)), 1, 0);
         faixa.Controls.Add(Cartao("Nº DE VENDAS", _lblVendas, Color.FromArgb(120, 60, 160)), 2, 0);
+        faixa.Controls.Add(Cartao("CANCELADAS", _lblCanceladas, Color.FromArgb(180, 60, 60)), 3, 0);
 
         // graficos (barras GDI+, escalam com a janela)
         var painelGraf = new TableLayoutPanel { Dock = DockStyle.Fill, ColumnCount = 1, RowCount = 2 };
@@ -98,7 +100,7 @@ public sealed class FormDashboard : Form
     {
         if (!_servico.CaixaAberto)
         {
-            _lblGaveta.Text = "--"; _lblBruto.Text = "--"; _lblVendas.Text = "0";
+            _lblGaveta.Text = "--"; _lblBruto.Text = "--"; _lblVendas.Text = "0"; _lblCanceladas.Text = "0";
             Text = "Painel em Tempo Real (caixa fechado)";
             return;
         }
@@ -108,6 +110,12 @@ public sealed class FormDashboard : Form
         _lblGaveta.Text = Dinheiro.Formatar(resumo.TotalGavetaCentavos);
         _lblBruto.Text = Dinheiro.Formatar(v.FaturamentoBrutoCentavos);
         _lblVendas.Text = v.QuantidadeVendas.ToString();
+
+        // canceladas (estornadas) do turno — nao entram no faturamento, mas o gestor vigia.
+        var vendasTurno = _servico.VendasDoTurno();
+        int canceladas = vendasTurno.Count(x => x.Cancelada);
+        _lblCanceladas.Text = canceladas.ToString();
+        if (canceladas > 0) _lblCanceladas.ForeColor = Color.FromArgb(200, 0, 0);
 
         _grafPagamentos.Definir(new (string, long, Color)[]
         {

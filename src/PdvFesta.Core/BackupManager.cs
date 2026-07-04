@@ -31,24 +31,36 @@ public static class BackupManager
 
     private static string Timestamp() => DateTime.Now.ToString("yyyyMMdd_HHmmss");
 
-    /// <summary>Copia o banco para 'destinoDir' com nome backup_pdv_TIMESTAMP.db.</summary>
+    /// <summary>
+    /// Caminho unico para o backup: se ja existir um com o mesmo timestamp (2 backups no mesmo
+    /// segundo — ex: gatilho "a cada N vendas" rapido), adiciona sufixo _2, _3... em vez de
+    /// SOBRESCREVER o anterior (que perderia um backup).
+    /// </summary>
+    private static string CaminhoUnico(string destinoDir, string ext)
+    {
+        var basePath = Path.Combine(destinoDir, $"backup_pdv_{Timestamp()}");
+        var caminho = basePath + ext;
+        int n = 2;
+        while (File.Exists(caminho)) caminho = $"{basePath}_{n++}{ext}";
+        return caminho;
+    }
+
+    /// <summary>Copia o banco para 'destinoDir' com nome backup_pdv_TIMESTAMP.db (unico).</summary>
     public static string CopiarComTimestamp(string dbPath, string destinoDir)
     {
         Directory.CreateDirectory(destinoDir);
         Checkpoint(dbPath);
-        var nome = $"backup_pdv_{Timestamp()}.db";
-        var destino = Path.Combine(destinoDir, nome);
-        File.Copy(dbPath, destino, overwrite: true);
+        var destino = CaminhoUnico(destinoDir, ".db");
+        File.Copy(dbPath, destino, overwrite: false);
         return destino;
     }
 
-    /// <summary>Empacota o banco num .zip (backup_pdv_TIMESTAMP.zip) em 'destinoDir'.</summary>
+    /// <summary>Empacota o banco num .zip (backup_pdv_TIMESTAMP.zip, unico) em 'destinoDir'.</summary>
     public static string GerarZip(string dbPath, string destinoDir)
     {
         Directory.CreateDirectory(destinoDir);
         Checkpoint(dbPath);
-        var zipPath = Path.Combine(destinoDir, $"backup_pdv_{Timestamp()}.zip");
-        if (File.Exists(zipPath)) File.Delete(zipPath);
+        var zipPath = CaminhoUnico(destinoDir, ".zip");
 
         using var zip = ZipFile.Open(zipPath, ZipArchiveMode.Create);
         zip.CreateEntryFromFile(dbPath, AppPathsNomeBanco(dbPath));
