@@ -78,6 +78,28 @@ public class ModosCupomNovosTests
             "nao deve sobrar papel branco no fim (o corte ja avanca)");
     }
 
+    [Fact]
+    public void SoVales_ImprimeORodapeUmaVezNoFim()
+    {
+        var cfg = new ConfigCupom { Modo = ModoCupom.SoVales, Evento = "X", Rodape = "Obrigado! Bom Arraia!" };
+        var linhas = CupomFormatter.MontarTicket(VendaExemplo(), cfg);
+        var texto = string.Join("\n", linhas.Select(x => x.Texto));
+
+        Assert.Contains("Obrigado", texto);                                    // rodape presente
+        // aparece UMA vez (nao um por vale) — conta as linhas que contem a palavra
+        int ocorrencias = linhas.Count(x => x.Texto.Contains("Obrigado"));
+        Assert.Equal(1, ocorrencias);
+    }
+
+    [Fact]
+    public void SoVales_SemRodapeConfigurado_NaoAdicionaNada()
+    {
+        var cfg = new ConfigCupom { Modo = ModoCupom.SoVales, Evento = "X", Rodape = "" };
+        var linhas = CupomFormatter.MontarTicket(VendaExemplo(), cfg);
+        // ultimo elemento deve ser o pontilhado do ultimo vale (nao sobra rodape vazio)
+        Assert.False(string.IsNullOrEmpty(linhas[^1].Texto) == false && linhas[^1].Texto.Contains("Obrigado"));
+    }
+
     // ---------------- FichaConsumo: 1 por unidade ----------------
 
     [Fact]

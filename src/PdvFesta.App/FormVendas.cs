@@ -147,32 +147,34 @@ public sealed class FormVendas : Form
         var menu = new MenuStrip { Font = new Font("Segoe UI", 10F) };
 
         var mArquivo = new ToolStripMenuItem("&Arquivo");
-        mArquivo.DropDownItems.Add("Abrir Caixa...", null, (s, e) => AbrirCaixaMenu());
-        mArquivo.DropDownItems.Add("Trocar Operador...", null, (s, e) => AbrirTrocaOperador());
+        mArquivo.DropDownItems.Add(Item("Abrir Caixa", Keys.F7, (s, e) => AbrirCaixaMenu()));
+        mArquivo.DropDownItems.Add(Item("Trocar Operador", Keys.Control | Keys.T, (s, e) => AbrirTrocaOperador()));
         mArquivo.DropDownItems.Add(Item("Painel em Tempo Real", Keys.F4, (s, e) => AbrirDashboard()));
         mArquivo.DropDownItems.Add(Item("Histórico de Vendas", Keys.F3, (s, e) => AbrirHistorico()));
+        mArquivo.DropDownItems.Add(Item("Balanço Geral (todos os caixas)", Keys.F6, (s, e) => AbrirBalancoGeral()));
         mArquivo.DropDownItems.Add(Item("Fechamento de Caixa", Keys.F9, (s, e) => AbrirFechamento()));
-        mArquivo.DropDownItems.Add("Exportar CSV do turno...", null, (s, e) => Dialogos.ExportarCsvComDialogo(this, _servico));
+        mArquivo.DropDownItems.Add(Item("Exportar CSV do turno", Keys.Control | Keys.E, (s, e) => Dialogos.ExportarCsvComDialogo(this, _servico)));
         mArquivo.DropDownItems.Add(new ToolStripSeparator());
-        mArquivo.DropDownItems.Add("Sair", null, (s, e) => Close());
+        mArquivo.DropDownItems.Add(Item("Sair", Keys.Alt | Keys.F4, (s, e) => Close()));
 
         var mConfig = new ToolStripMenuItem("&Configurações");
-        mConfig.DropDownItems.Add("Gerenciar Produtos...", null, (s, e) => AbrirGerenciarProdutos());
-        mConfig.DropDownItems.Add("Gerenciar Categorias...", null, (s, e) => AbrirGerenciarCategorias());
-        mConfig.DropDownItems.Add("Gerenciar Promoções / Combos...", null, (s, e) => AbrirGerenciarPromocoes());
+        mConfig.DropDownItems.Add(Item("Gerenciar Produtos", Keys.Control | Keys.P, (s, e) => AbrirGerenciarProdutos()));
+        mConfig.DropDownItems.Add(Item("Gerenciar Categorias", Keys.Control | Keys.G, (s, e) => AbrirGerenciarCategorias()));
+        mConfig.DropDownItems.Add(Item("Gerenciar Promoções / Combos", Keys.Control | Keys.M, (s, e) => AbrirGerenciarPromocoes()));
         mConfig.DropDownItems.Add(Item("Gerenciar Impressora", Keys.F12, (s, e) => AbrirConfigImpressora()));
-        mConfig.DropDownItems.Add("Layout do Cupom...", null, (s, e) => AbrirLayoutCupom());
+        mConfig.DropDownItems.Add(Item("Layout do Cupom", Keys.Control | Keys.L, (s, e) => AbrirLayoutCupom()));
         mConfig.DropDownItems.Add(new ToolStripSeparator());
-        mConfig.DropDownItems.Add("Permissões e Senha...", null, (s, e) => AbrirPermissoes());
+        mConfig.DropDownItems.Add(Item("Permissões do Operador", Keys.Control | Keys.K, (s, e) => AbrirPermissoes()));
+        mConfig.DropDownItems.Add(Item("Trocar Senha do Admin", Keys.Control | Keys.H, (s, e) => AbrirTrocarSenha()));
 
         var mFerr = new ToolStripMenuItem("Ferramen&tas");
         mFerr.DropDownItems.Add(Item("Backup / Restauração", Keys.F8, (s, e) => AbrirBackup()));
         mFerr.DropDownItems.Add(new ToolStripSeparator());
-        mFerr.DropDownItems.Add("Sangria (retirada)...", null, (s, e) => AbrirMovimento(TipoMovimento.Sangria));
-        mFerr.DropDownItems.Add("Suprimento (entrada)...", null, (s, e) => AbrirMovimento(TipoMovimento.Suprimento));
+        mFerr.DropDownItems.Add(Item("Sangria (retirada)", Keys.Control | Keys.S, (s, e) => AbrirMovimento(TipoMovimento.Sangria)));
+        mFerr.DropDownItems.Add(Item("Suprimento (entrada)", Keys.Control | Keys.U, (s, e) => AbrirMovimento(TipoMovimento.Suprimento)));
 
         var mAjuda = new ToolStripMenuItem("A&juda");
-        mAjuda.DropDownItems.Add("Sobre...", null, (s, e) => Dialogos.Modal(this, () => new FormSobre()));
+        mAjuda.DropDownItems.Add(Item("Sobre", Keys.F1, (s, e) => Dialogos.Modal(this, () => new FormSobre())));
 
         menu.Items.AddRange(new ToolStripItem[] { mArquivo, mConfig, mFerr, mAjuda });
         MainMenuStrip = menu;
@@ -763,6 +765,13 @@ public sealed class FormVendas : Form
         Dialogos.Modal(this, () => new FormDashboard(_servico));
     }
 
+    // Balanco Geral: visao gerencial de TODOS os caixas -> pede senha de admin (dado sensivel).
+    private void AbrirBalancoGeral()
+    {
+        if (!Dialogos.LiberarAcao(this, _servico, AcaoProtegida.BalancoGeral)) return;
+        Dialogos.Modal(this, () => new FormBalancoGeral(_servico));
+    }
+
     private void AbrirTrocaOperador()
     {
         if (!_servico.CaixaAberto)
@@ -834,6 +843,13 @@ public sealed class FormVendas : Form
         // a tela de permissoes SEMPRE exige senha (nao pode ser desligada).
         if (!Dialogos.LiberarAcao(this, _servico, AcaoProtegida.Permissoes)) return;
         Dialogos.Modal(this, () => new FormPermissoes(_servico));
+    }
+
+    private void AbrirTrocarSenha()
+    {
+        // trocar a senha do admin tambem exige a senha atual (dentro da propria tela).
+        if (!Dialogos.LiberarAcao(this, _servico, AcaoProtegida.Permissoes)) return;
+        Dialogos.Modal(this, () => new FormTrocarSenha(_servico));
     }
 
     private void AbrirMovimento(TipoMovimento tipo)

@@ -32,6 +32,7 @@ public class PermissoesTests : IDisposable
     [InlineData(AcaoProtegida.Backup, true)]
     [InlineData(AcaoProtegida.SangriaSuprimento, true)]
     [InlineData(AcaoProtegida.ExportarCsv, true)]
+    [InlineData(AcaoProtegida.BalancoGeral, true)]
     public void Default_AcoesCriticas_ExigemSenha(AcaoProtegida acao, bool esperado)
     {
         Assert.Equal(esperado, Permissoes.PadraoExigeSenha(acao));

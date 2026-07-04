@@ -235,6 +235,13 @@ public static class CupomFormatter
                 l.Add(new LinhaCupom(""));
             }
         }
+
+        // RODAPE (mensagem de agradecimento/senha): uma vez, no fim (nao em cada vale, p/
+        // economizar papel). Antes ficava faltando no modo "So Vales".
+        if (!string.IsNullOrWhiteSpace(cfg.Rodape))
+            foreach (var linha in Wrap(cfg.Rodape.Trim(), largura))
+                l.Add(new LinhaCupom(Centralizar(linha, largura)));
+
         RemoverBrancosNoFim(l);
         return l;
     }
