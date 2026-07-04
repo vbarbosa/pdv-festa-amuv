@@ -267,11 +267,17 @@ public sealed class Servico : IDisposable
     }
 
     /// <summary>
-    /// MODO DEMONSTRACAO (gravacao do video): PDV_DEMO=1 faz o app fingir que imprimiu
-    /// com sucesso, sem tocar em hardware. Assim a demo nunca abre o popup de "erro na
-    /// impressora" — nao ha impressora conectada porque e so uma gravacao.
+    /// Quando true, NUNCA envia para a impressora fisica (finge sucesso). Flag de INSTANCIA
+    /// (nao global) para os TESTES ligarem sem corrida entre threads. Testes de venda devem
+    /// ligar isto para nunca imprimir de verdade. Default: respeita PDV_DEMO (video).
     /// </summary>
-    private static bool ModoDemo => Environment.GetEnvironmentVariable("PDV_DEMO") == "1";
+    public bool ImpressaoSimulada { get; set; }
+
+    /// <summary>
+    /// MODO DEMONSTRACAO (gravacao do video): PDV_DEMO=1 faz o app fingir que imprimiu
+    /// com sucesso, sem tocar em hardware. Combinado com a flag de instancia acima.
+    /// </summary>
+    private bool ModoDemo => ImpressaoSimulada || Environment.GetEnvironmentVariable("PDV_DEMO") == "1";
 
     /// <summary>
     /// Imprime (ou reimprime) o cupom de uma venda usando o layout configurado.

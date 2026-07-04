@@ -16,16 +16,14 @@ public class ContadorImpressaoTests : IDisposable
 
     public ContadorImpressaoTests()
     {
-        // PDV_DEMO=1: ImprimirVenda finge sucesso sem tocar em impressora, mas AINDA conta.
-        Environment.SetEnvironmentVariable("PDV_DEMO", "1");
         _db = Path.Combine(Path.GetTempPath(), $"impr_{Guid.NewGuid():N}.db");
         _servico = new Servico(_db, "___inexistente___.json");
+        _servico.ImpressaoSimulada = true;   // flag de INSTANCIA: finge imprimir, mas AINDA conta (sem tocar impressora)
         _servico.AbrirCaixa(0, "op");
     }
 
     public void Dispose()
     {
-        Environment.SetEnvironmentVariable("PDV_DEMO", null);
         _servico.Dispose();
         Microsoft.Data.Sqlite.SqliteConnection.ClearAllPools();
         foreach (var ext in new[] { "", "-wal", "-shm" })

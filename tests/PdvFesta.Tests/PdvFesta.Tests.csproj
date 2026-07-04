@@ -20,4 +20,10 @@
     <ProjectReference Include="..\..\src\PdvFesta.App\PdvFesta.App.csproj" />
   </ItemGroup>
 
+  <ItemGroup>
+    <!-- serial (sem paralelismo entre classes): evita corrida do PDV_DEMO (var global do
+         processo) que fazia testes de venda imprimirem na impressora REAL. -->
+    <None Include="xunit.runner.json" CopyToOutputDirectory="PreserveNewest" />
+  </ItemGroup>
+
 </Project>

@@ -13,6 +13,7 @@ public class PermissoesTests : IDisposable
     {
         _db = Path.Combine(Path.GetTempPath(), $"perm_{Guid.NewGuid():N}.db");
         _servico = new Servico(_db, cardapioPath: "___inexistente___.json");
+        _servico.ImpressaoSimulada = true;   // seguranca: jamais tocar a impressora nos testes
         _perm = new Permissoes(_servico);
     }
 
