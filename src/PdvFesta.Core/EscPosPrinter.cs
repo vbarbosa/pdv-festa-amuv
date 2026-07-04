@@ -222,19 +222,17 @@ public static class EscPosPrinter
                 }
                 catch { /* alguns drivers nao deixam setar; segue */ }
 
-                // (2) remove jobs presos em erro (Retained/Error) que travam a fila.
+                // (2) LIMPA A FILA antes de mandar o cupom novo. Cada cupom e enviado
+                // individualmente e sai na hora — entao QUALQUER job pre-existente aqui e lixo
+                // de uma tentativa anterior (job fantasma retido/preso que o Windows fica
+                // reprocessando sozinho e "imprime do nada"). Remover todos evita duplicata e
+                // o famoso cupom-fantasma. So mexe na fila DESTA impressora.
                 try
                 {
                     using var jobs = new System.Management.ManagementObjectSearcher(
                         $"SELECT * FROM Win32_PrintJob WHERE Name LIKE '{impressora.Replace("'", "''")},%'");
                     foreach (System.Management.ManagementObject j in jobs.Get())
-                    {
-                        var status = j["JobStatus"]?.ToString() ?? "";
-                        if (status.Contains("Error", StringComparison.OrdinalIgnoreCase) ||
-                            status.Contains("Retained", StringComparison.OrdinalIgnoreCase) ||
-                            status.Contains("Blocked", StringComparison.OrdinalIgnoreCase))
-                            try { j.Delete(); } catch { }
-                    }
+                        try { j.Delete(); } catch { }
                 }
                 catch { /* sem jobs ou WMI indisponivel */ }
             }
