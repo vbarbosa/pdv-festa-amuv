@@ -92,6 +92,9 @@ public sealed class Venda
     /// <summary>Concluida ou Cancelada (estornada). Canceladas saem dos totais do caixa.</summary>
     public StatusVenda Status { get; set; } = StatusVenda.Concluida;
 
+    /// <summary>Quantas vezes o cupom desta venda ja foi impresso (1a via + reimpressoes).</summary>
+    public int Impressoes { get; set; }
+
     public bool Cancelada => Status == StatusVenda.Cancelada;
 }
 

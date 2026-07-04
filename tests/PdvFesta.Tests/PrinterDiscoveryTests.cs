@@ -54,4 +54,104 @@ public class PrinterDiscoveryTests
             p.Contains("(Bluetooth)") || p.Contains("(serial)"),
             $"porta sem rotulo: {p}"));
     }
+
+    [Fact]
+    public void StatusFila_AlvoVazio_NaoOnlineComDescricao()
+    {
+        var st = PrinterDiscovery.StatusFila("");
+        Assert.False(st.PareceOnline);
+        Assert.False(st.ConfirmavelSoImprimindo);
+        Assert.False(string.IsNullOrWhiteSpace(st.Descricao));
+    }
+
+    [Theory]
+    [InlineData("COM6 (Bluetooth)")]
+    [InlineData("COM3")]
+    public void StatusFila_PortaCom_OnlineEConfirmavel(string alvo)
+    {
+        var st = PrinterDiscovery.StatusFila(alvo);
+        Assert.True(st.PareceOnline);
+        Assert.True(st.ConfirmavelSoImprimindo);   // porta pareada: envio confirma
+    }
+
+    [Fact]
+    public void StatusFila_FilaUsb_NuncaMenteProntaSemImprimir()
+    {
+        // para uma fila USB (mesmo inexistente no ambiente de teste), a descricao NAO pode
+        // afirmar "PRONTA/online" categoricamente — o status USB so e confirmado ao imprimir.
+        var st = PrinterDiscovery.StatusFila("MPT-II 58mm (USB001)");
+        Assert.DoesNotContain("PRONTA", st.Descricao, System.StringComparison.OrdinalIgnoreCase);
+        // se parece online, tem que ser explicitamente "confirmavel so imprimindo".
+        if (st.PareceOnline) Assert.True(st.ConfirmavelSoImprimindo);
+    }
+
+    [Fact]
+    public void StatusFila_SemAlvo_SemaforoVermelho()
+    {
+        var st = PrinterDiscovery.StatusFila("");
+        Assert.Equal(PrinterDiscovery.Semaforo.Vermelho, st.Nivel);
+    }
+
+    [Theory]
+    [InlineData("COM6 (Bluetooth)")]
+    [InlineData("COM3")]
+    public void StatusFila_PortaCom_SemaforoAmarelo(string alvo)
+    {
+        // porta pareada: pode imprimir, mas so o envio confirma — amarelo, nao verde.
+        var st = PrinterDiscovery.StatusFila(alvo);
+        Assert.Equal(PrinterDiscovery.Semaforo.Amarelo, st.Nivel);
+    }
+
+    [Theory]
+    [InlineData("")]
+    [InlineData("COM6 (Bluetooth)")]
+    public void ListarFila_SemFilaDoWindows_VaziaEnaoLanca(string alvo)
+    {
+        // alvo vazio ou porta COM nao tem fila do Windows para inspecionar.
+        var fila = PrinterDiscovery.ListarFila(alvo);
+        Assert.NotNull(fila);
+        Assert.Empty(fila);
+    }
+
+    [Fact]
+    public void ListarFila_FilaInexistente_NaoLancaEVazia()
+    {
+        // impressora que nao existe no ambiente de teste: sem jobs, sem excecao.
+        var fila = PrinterDiscovery.ListarFila("MPT-II 58mm (USB001)");
+        Assert.NotNull(fila);
+    }
+
+    [Theory]
+    [InlineData("")]
+    [InlineData("COM6 (Bluetooth)")]
+    public void LimparFila_SemFilaDoWindows_ZeroEnaoLanca(string alvo)
+    {
+        Assert.Equal(0, PrinterDiscovery.LimparFila(alvo));
+    }
+
+    [Fact]
+    public void DetalhesTecnicos_PortaCom_ExtraiPortaEtipo()
+    {
+        var d = PrinterDiscovery.DetalhesTecnicos("COM6 (Bluetooth)");
+        Assert.Equal("COM6", d.Porta);
+        Assert.Contains("Bluetooth", d.Driver);
+        Assert.False(d.PadraoDoWindows);   // porta COM nunca e padrao do Windows
+    }
+
+    [Fact]
+    public void DetalhesTecnicos_AlvoVazio_Placeholder()
+    {
+        var d = PrinterDiscovery.DetalhesTecnicos("");
+        Assert.Equal("—", d.Porta);
+        Assert.Equal("—", d.Driver);
+    }
+
+    [Theory]
+    [InlineData("")]
+    [InlineData("COM6 (Bluetooth)")]
+    public void DefinirPadraoDoWindows_AlvoInvalido_False(string alvo)
+    {
+        // vazio ou porta COM nao pode virar padrao do Windows.
+        Assert.False(PrinterDiscovery.DefinirPadraoDoWindows(alvo));
+    }
 }

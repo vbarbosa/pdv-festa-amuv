@@ -10,14 +10,17 @@ public sealed class AutoBackupTimer : IDisposable
 {
     private readonly string _dbPath;
     private readonly Func<string?> _obterPastaDestino;   // le a pasta configurada na hora
+    private readonly Func<int>? _obterManter;            // quantos backups manter (0 = todos)
     private readonly Action<string>? _log;
     private Timer? _timer;
     private int _emExecucao;   // 0/1 para evitar reentrancia se um backup demorar
 
-    public AutoBackupTimer(string dbPath, Func<string?> obterPastaDestino, Action<string>? log = null)
+    public AutoBackupTimer(string dbPath, Func<string?> obterPastaDestino, Action<string>? log = null,
+                           Func<int>? obterManter = null)
     {
         _dbPath = dbPath;
         _obterPastaDestino = obterPastaDestino;
+        _obterManter = obterManter;
         _log = log;
     }
 
@@ -43,6 +46,14 @@ public sealed class AutoBackupTimer : IDisposable
             if (string.IsNullOrWhiteSpace(destino)) return;
             var arquivo = BackupManager.CopiarComTimestamp(_dbPath, destino);
             _log?.Invoke($"Backup automatico: {Path.GetFileName(arquivo)}");
+
+            // limpa antigos para nao encher o disco/OneDrive (se configurado 'manter N').
+            int manter = _obterManter?.Invoke() ?? 0;
+            if (manter > 0)
+            {
+                int n = BackupManager.LimparAntigos(destino, manter);
+                if (n > 0) _log?.Invoke($"Backup: {n} antigo(s) apagado(s) (mantendo {manter}).");
+            }
         }
         catch (Exception ex)
         {

@@ -55,13 +55,17 @@ public sealed class FormHistoricoVendas : Form
         _grid.Columns.Add("hora", "Hora");
         _grid.Columns.Add("total", "Total");
         _grid.Columns.Add("forma", "Pagamento");
+        _grid.Columns.Add("impr", "Impressões");
         _grid.Columns.Add("status", "Status");
-        _grid.Columns["id"]!.FillWeight = 18;
-        _grid.Columns["hora"]!.FillWeight = 18;
-        _grid.Columns["total"]!.FillWeight = 22;
+        _grid.Columns["id"]!.FillWeight = 15;
+        _grid.Columns["hora"]!.FillWeight = 14;
+        _grid.Columns["total"]!.FillWeight = 20;
         _grid.Columns["total"]!.DefaultCellStyle.Alignment = DataGridViewContentAlignment.MiddleRight;
-        _grid.Columns["forma"]!.FillWeight = 24;
-        _grid.Columns["status"]!.FillWeight = 18;
+        _grid.Columns["forma"]!.FillWeight = 22;
+        _grid.Columns["impr"]!.FillWeight = 14;
+        _grid.Columns["impr"]!.DefaultCellStyle.Alignment = DataGridViewContentAlignment.MiddleCenter;
+        _grid.Columns["impr"]!.ToolTipText = "Quantas vezes esta nota foi impressa (1a via + reimpressoes)";
+        _grid.Columns["status"]!.FillWeight = 15;
 
         _lblResumo.Dock = DockStyle.Top; _lblResumo.Height = 30;
         _lblResumo.TextAlign = ContentAlignment.MiddleLeft; _lblResumo.Padding = new Padding(12, 0, 0, 0);
@@ -69,6 +73,7 @@ public sealed class FormHistoricoVendas : Form
 
         var barra = new FlowLayoutPanel { Dock = DockStyle.Bottom, Height = 60, Padding = new Padding(10) };
         barra.Controls.Add(Botao("Atualizar (F5)", Color.FromArgb(70, 70, 90), (s, e) => Carregar()));
+        barra.Controls.Add(Botao("Exportar CSV", Color.FromArgb(0, 120, 60), (s, e) => Dialogos.ExportarCsvComDialogo(this, _servico)));
         // Reimprimir: para vendas feitas SEM impressora (ex: comecou a festa sem cabo),
         // depois de configurar a impressora o operador reimprime a nota daqui.
         var btnReimprimir = Botao("Reimprimir Nota", Color.FromArgb(0, 110, 60), (s, e) => Reimprimir());
@@ -102,15 +107,32 @@ public sealed class FormHistoricoVendas : Form
         _grid.Rows.Clear();
         foreach (var v in _vendas)
         {
+            // rotulo de impressoes: 0 = "—" (nunca saiu), 1 = "1", 2+ = "Nx" (reimpressa).
+            string labelImpr = v.Impressoes <= 0 ? "—"
+                             : v.Impressoes == 1 ? "1"
+                             : $"{v.Impressoes}x";
+
             int idx = _grid.Rows.Add(
                 $"#{v.Id}", v.DataHora.ToString("HH:mm"),
                 CupomFormatter.Moeda(v.TotalCentavos),
                 CupomFormatter.NomeForma(v.Forma),
+                labelImpr,
                 v.Cancelada ? "CANCELADA" : "OK");
             if (v.Cancelada)
             {
                 _grid.Rows[idx].DefaultCellStyle.ForeColor = Color.Gray;
                 _grid.Rows[idx].DefaultCellStyle.Font = new Font(_grid.Font, FontStyle.Strikeout);
+            }
+            else if (v.Impressoes >= 2)
+            {
+                // destaca (laranja) notas reimpressas: chamam atencao para conferencia.
+                _grid.Rows[idx].Cells["impr"].Style.ForeColor = Color.FromArgb(200, 90, 0);
+                _grid.Rows[idx].Cells["impr"].Style.Font = new Font(_grid.Font, FontStyle.Bold);
+            }
+            else if (v.Impressoes == 0)
+            {
+                // nunca impressa: cinza discreto (venda feita sem impressora, por ex.)
+                _grid.Rows[idx].Cells["impr"].Style.ForeColor = Color.Gray;
             }
         }
         int validas = _vendas.Count(v => !v.Cancelada);
@@ -128,6 +150,15 @@ public sealed class FormHistoricoVendas : Form
         }
         var venda = _vendas[_grid.CurrentRow.Index];
 
+        // SEGURANCA: venda cancelada (estornada) nao pode ser reimpressa — evita entregar
+        // ficha/nota de uma venda que foi devolvida.
+        if (venda.Cancelada)
+        {
+            MessageBox.Show("Esta venda foi CANCELADA (estornada) e não pode ser reimpressa.",
+                "Reimprimir", MessageBoxButtons.OK, MessageBoxIcon.Warning);
+            return;
+        }
+
         if (!_servico.TemImpressora)
         {
             MessageBox.Show("Nenhuma impressora configurada.\nConfigure a impressora (F12) e tente de novo.",
@@ -137,8 +168,12 @@ public sealed class FormHistoricoVendas : Form
 
         var (ok, msg) = _servico.ImprimirVenda(venda);
         if (ok)
-            MessageBox.Show($"Nota da venda #{venda.Id} enviada para a impressora.",
+        {
+            Carregar();   // atualiza o contador de impressoes na tela
+            MessageBox.Show($"Nota da venda #{venda.Id} enviada para a impressora.\n" +
+                $"Esta nota já foi impressa {venda.Impressoes}x.",
                 "Reimprimir", MessageBoxButtons.OK, MessageBoxIcon.Information);
+        }
         else
             MessageBox.Show($"Não foi possível imprimir.\nDetalhe: {msg}",
                 "Reimprimir", MessageBoxButtons.OK, MessageBoxIcon.Warning);

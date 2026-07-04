@@ -19,6 +19,7 @@ public sealed class FormLayoutCupom : Form
     private readonly RadioButton _rbCompleto = new();
     private readonly RadioButton _rbFicha = new();
     private readonly RadioButton _rbVales = new();
+    private readonly RadioButton _rbSoVales = new();
     private readonly CheckBox _chkSeparar = new();
     private readonly TextBox _txtRodape = new();
     private readonly TextBox _preview = new();
@@ -48,12 +49,23 @@ public sealed class FormLayoutCupom : Form
         _txtSubtitulo.Font = new Font("Segoe UI", 12F);
         _txtSubtitulo.TextChanged += (s, e) => AtualizarPreview();
 
-        _rbCompleto.Text = "Recibo Completo (valores, total, troco)";
+        // radios com texto em DUAS linhas (titulo + descricao curta) para nao cortar em 344px.
+        _rbCompleto.Text = "Recibo Completo\n(valores, total, troco)";
         _rbCompleto.CheckedChanged += (s, e) => { AtualizarEstado(); AtualizarPreview(); };
-        _rbFicha.Text = "Ficha de Consumo (só item, fonte grande)";
+        _rbFicha.Text = "Ficha de Consumo\n(só item, fonte grande, 1 por unidade)";
         _rbFicha.CheckedChanged += (s, e) => { AtualizarEstado(); AtualizarPreview(); };
-        _rbVales.Text = "Recibo + Vales destacáveis (1 ficha por unidade)";
+        _rbVales.Text = "Recibo + Vales destacáveis\n(recibo + 1 ficha por unidade)";
         _rbVales.CheckedChanged += (s, e) => { AtualizarEstado(); AtualizarPreview(); };
+        _rbSoVales.Text = "Só Vales destacáveis\n(sem recibo, mini-cabeçalho por ficha)";
+        _rbSoVales.CheckedChanged += (s, e) => { AtualizarEstado(); AtualizarPreview(); };
+
+        // altura suficiente para 2 linhas e sem cortar o texto (AutoSize off + altura fixa).
+        foreach (var rb in new[] { _rbCompleto, _rbFicha, _rbVales, _rbSoVales })
+        {
+            rb.AutoSize = false;
+            rb.Height = 46;
+            rb.TextAlign = ContentAlignment.MiddleLeft;
+        }
 
         _chkSeparar.Text = "Cortar / separar 1 ficha por item";
         _chkSeparar.CheckedChanged += (s, e) => AtualizarPreview();
@@ -94,7 +106,7 @@ public sealed class FormLayoutCupom : Form
         {
             Titulo("CABECALHO"), Rotulo("Nome do evento:"), _txtEvento,
             Rotulo("Subtitulo (ex: Caixa 01):"), _txtSubtitulo,
-            Titulo("MODO DE IMPRESSÃO"), _rbCompleto, _rbFicha, _rbVales, _chkSeparar,
+            Titulo("MODO DE IMPRESSÃO"), _rbCompleto, _rbFicha, _rbVales, _rbSoVales, _chkSeparar,
             Titulo("RODAPE"), _txtRodape, btnSalvar, btnTeste
         };
         foreach (var c in ordenados) { c.Width = 344; fluxo.Controls.Add(c); }
@@ -139,6 +151,7 @@ public sealed class FormLayoutCupom : Form
         _rbCompleto.Checked = c.Modo == ModoCupom.Completo;
         _rbFicha.Checked = c.Modo == ModoCupom.FichaConsumo;
         _rbVales.Checked = c.Modo == ModoCupom.ReciboComVales;
+        _rbSoVales.Checked = c.Modo == ModoCupom.SoVales;
         _chkSeparar.Checked = c.SepararPorItem;
         _txtRodape.Text = c.Rodape;
         AtualizarEstado();
@@ -150,6 +163,7 @@ public sealed class FormLayoutCupom : Form
         Subtitulo = _txtSubtitulo.Text,
         Modo = _rbFicha.Checked ? ModoCupom.FichaConsumo
              : _rbVales.Checked ? ModoCupom.ReciboComVales
+             : _rbSoVales.Checked ? ModoCupom.SoVales
              : ModoCupom.Completo,
         SepararPorItem = _chkSeparar.Checked,
         Rodape = _txtRodape.Text

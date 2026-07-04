@@ -69,14 +69,41 @@ jobs:
         run: |
           Compress-Archive -Path release/PDV-Festa/* -DestinationPath "release/FestaJuninaPDV_Release.zip" -Force
 
-      # --- Publica na aba Releases (tag movel 'latest') ---
-      - name: Publicar Release
+      # --- Le a versao do topo do CHANGELOG (ex: "## [2.4.1] ...") ---
+      - name: Ler versao do CHANGELOG
+        id: versao
+        shell: pwsh
+        run: |
+          $m = Select-String -Path docs/CHANGELOG.md -Pattern '^\#\#\s*\[([0-9]+\.[0-9]+\.[0-9]+)\]' | Select-Object -First 1
+          $v = if ($m) { $m.Matches[0].Groups[1].Value } else { "0.0.$env:GITHUB_RUN_NUMBER" }
+          "versao=$v" | Out-File -FilePath $env:GITHUB_OUTPUT -Append
+          Write-Host "Versao detectada: $v"
+
+      # --- Publica a Release VERSIONADA (tag permanente, ex: v2.4.1) ---
+      - name: Publicar Release versionada
+        uses: softprops/action-gh-release@v2
+        with:
+          tag_name: v${{ steps.versao.outputs.versao }}
+          name: PDV Festa v${{ steps.versao.outputs.versao }}
+          body: |
+            Release v${{ steps.versao.outputs.versao }} (build #${{ github.run_number }}).
+
+            **Como usar:**
+            - `Setup_PDVFestaJunina.exe` -> instalador completo (recomendado).
+            - `FestaJuninaPDV_Release.zip` -> versao portable (extrair e rodar o .exe).
+          files: |
+            release/Setup_PDVFestaJunina.exe
+            release/FestaJuninaPDV_Release.zip
+          fail_on_unmatched_files: true
+
+      # --- Atualiza tambem a tag movel 'latest' (sempre aponta pro mais novo) ---
+      - name: Publicar Release latest
         uses: softprops/action-gh-release@v2
         with:
           tag_name: latest
           name: PDV Festa - versao mais recente
           body: |
-            Build automatico da branch main (run #${{ github.run_number }}).
+            Build automatico da branch main (run #${{ github.run_number }}) — v${{ steps.versao.outputs.versao }}.
 
             **Como usar:**
             - `Setup_PDVFestaJunina.exe` -> instalador completo (recomendado).

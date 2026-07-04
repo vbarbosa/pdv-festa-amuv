@@ -13,6 +13,7 @@ public class TrocaOperadorEPagamentoTests : IDisposable
     {
         _db = Path.Combine(Path.GetTempPath(), $"troca_{Guid.NewGuid():N}.db");
         _servico = new Servico(_db, "___inexistente___.json");
+        _servico.ImpressaoSimulada = true;   // nunca imprime na impressora real durante o teste
     }
 
     public void Dispose()

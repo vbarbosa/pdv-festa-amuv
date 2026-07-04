@@ -144,8 +144,23 @@ public static class CupomFormatter
         {
             ModoCupom.FichaConsumo  => MontarFicha(venda, cfg, largura),
             ModoCupom.ReciboComVales => MontarReciboComVales(venda, cfg, largura),
+            ModoCupom.SoVales => MontarSoVales(venda, cfg, largura),
             _ => MontarReciboCompleto(venda, cfg, largura)
         };
+    }
+
+    /// <summary>
+    /// Mini-cabecalho da festa para cada FICHA/VALE: nome do evento (fonte grande) + subtitulo
+    /// e data em linha fina. Compacto para nao gastar bobina, mas identifica cada ficha sozinha.
+    /// </summary>
+    private static void AdicionarMiniCabecalho(List<LinhaCupom> l, Venda venda, ConfigCupom cfg, int largura)
+    {
+        if (!string.IsNullOrWhiteSpace(cfg.Evento))
+            l.Add(new LinhaCupom(cfg.Evento.Trim(), EstiloLinha.Titulo));
+        var sub = string.IsNullOrWhiteSpace(cfg.Subtitulo)
+            ? $"#{venda.Id}  {venda.DataHora:dd/MM HH:mm}"
+            : $"{cfg.Subtitulo.Trim()}  -  #{venda.Id}  {venda.DataHora:dd/MM HH:mm}";
+        l.Add(new LinhaCupom(Centralizar(sub, largura)));
     }
 
     /// <summary>Divisoria DUPLA (===) que separa o recibo de pagamento das fichas.</summary>
@@ -174,7 +189,7 @@ public static class CupomFormatter
         //    combo, que tem ProdutoId vazio), imprime 'Quantidade' vales de "1x NOME".
         foreach (var item in venda.Itens)
         {
-            if (string.IsNullOrEmpty(item.ProdutoId)) continue;   // linha de desconto -> nao vira vale
+            if (!EhItemFisico(item)) continue;   // linha de desconto -> nao vira vale
 
             var qtd = Math.Max(0, item.Quantidade);
             for (int n = 0; n < qtd; n++)
@@ -191,13 +206,52 @@ public static class CupomFormatter
             }
         }
 
-        // remove as linhas em branco no FIM (o corte ja avanca a bobina) para nao sobrar
-        // quase um vale inteiro de papel branco depois do ultimo ticket.
-        while (l.Count > 0 && l[^1].Estilo == EstiloLinha.Normal && l[^1].Texto == "")
-            l.RemoveAt(l.Count - 1);
-
+        RemoverBrancosNoFim(l);
         return l;
     }
+
+    /// <summary>
+    /// SO os VALES destacaveis (sem o recibo gerencial): cada unidade fisica vira um vale
+    /// "1x NOME" em fonte grande, com um MINI-CABECALHO da festa em CADA ficha (para a ficha
+    /// se identificar sozinha na barraca), separados por pontilhado para rasgar. Economico.
+    /// </summary>
+    private static List<LinhaCupom> MontarSoVales(Venda venda, ConfigCupom cfg, int largura)
+    {
+        var l = new List<LinhaCupom>();
+        foreach (var item in venda.Itens)
+        {
+            if (!EhItemFisico(item)) continue;   // linha de desconto -> nao vira vale
+
+            var qtd = Math.Max(0, item.Quantidade);
+            for (int n = 0; n < qtd; n++)
+            {
+                AdicionarMiniCabecalho(l, venda, cfg, largura);   // festa em cada ficha
+                l.Add(new LinhaCupom(""));
+                foreach (var linha in Wrap($"1X {item.Nome.ToUpperInvariant()}", 28))
+                    l.Add(new LinhaCupom(linha, EstiloLinha.Expandida));
+                l.Add(new LinhaCupom(Centralizar("Vale 1 item", largura)));
+                l.Add(new LinhaCupom(""));
+                l.Add(new LinhaCupom(DivisoriaPontilhada(largura)));   // linha de rasgar
+                l.Add(new LinhaCupom(""));
+            }
+        }
+        RemoverBrancosNoFim(l);
+        return l;
+    }
+
+    /// <summary>Remove linhas em branco no FIM (o corte ja avanca) para nao sobrar papel branco.</summary>
+    private static void RemoverBrancosNoFim(List<LinhaCupom> l)
+    {
+        while (l.Count > 0 && l[^1].Estilo == EstiloLinha.Normal && l[^1].Texto == "")
+            l.RemoveAt(l.Count - 1);
+    }
+
+    /// <summary>
+    /// Itens que viram FICHA/VALE: exclui APENAS a linha de desconto de combo (ProdutoId vazio
+    /// E subtotal negativo). Itens normais entram mesmo sem ProdutoId setado (vendas legadas).
+    /// </summary>
+    private static bool EhItemFisico(ItemVenda i) =>
+        !(string.IsNullOrEmpty(i.ProdutoId) && i.SubtotalCentavos < 0);
 
     private static List<LinhaCupom> MontarReciboCompleto(Venda venda, ConfigCupom cfg, int largura)
     {
@@ -258,25 +312,36 @@ public static class CupomFormatter
     {
         var l = new List<LinhaCupom>();
 
+        // CABECALHO melhorado: nome da festa (grande), subtitulo/data em linha fina e uma
+        // divisoria — a ficha fica identificada, sem ser so o nome do item solto no topo.
         if (!string.IsNullOrWhiteSpace(cfg.Evento))
             l.Add(new LinhaCupom(cfg.Evento.Trim(), EstiloLinha.Titulo));
+        var sub = string.IsNullOrWhiteSpace(cfg.Subtitulo)
+            ? $"Ficha de Consumo  -  #{venda.Id}"
+            : $"{cfg.Subtitulo.Trim()}  -  #{venda.Id}";
+        l.Add(new LinhaCupom(Centralizar(sub, largura)));
+        l.Add(new LinhaCupom(Centralizar($"{venda.DataHora:dd/MM/yyyy HH:mm}", largura)));
+        l.Add(new LinhaCupom(Divisoria(largura)));
 
-        var itens = venda.Itens;
-        for (int idx = 0; idx < itens.Count; idx++)
+        // DESMEMBRA cada item em 1 ficha POR UNIDADE ("1X NOME"), nao agrupa "3X". Assim cada
+        // unidade e uma ficha destacavel, entregavel numa barraca diferente.
+        var unidades = venda.Itens
+            .Where(EhItemFisico)    // ignora so a linha de desconto de combo
+            .SelectMany(i => Enumerable.Repeat(i.Nome, Math.Max(0, i.Quantidade)))
+            .ToList();
+
+        for (int idx = 0; idx < unidades.Count; idx++)
         {
-            var item = itens[idx];
-            // "2X BOLO DE MILHO" em fonte expandida (16 col) com quebra por palavra.
-            var texto = $"{item.Quantidade}X {item.Nome.ToUpperInvariant()}";
-            foreach (var linha in Wrap(texto, LarguraExpandida))
+            foreach (var linha in Wrap($"1X {unidades[idx].ToUpperInvariant()}", LarguraExpandida))
                 l.Add(new LinhaCupom(linha, EstiloLinha.Expandida));
 
-            bool ultimo = idx == itens.Count - 1;
+            bool ultimo = idx == unidades.Count - 1;
             if (!ultimo)
             {
                 if (cfg.SepararPorItem)
                     l.Add(LinhaCupom.CorteFicha);   // corta -> ficha separada por barraca
                 else
-                    l.Add(new LinhaCupom(""));       // so um respiro entre itens
+                    l.Add(new LinhaCupom(""));       // so um respiro entre fichas
             }
         }
 

@@ -48,7 +48,8 @@ public sealed class Servico : IDisposable
         _autoBackup = new AutoBackupTimer(
             dbPath,
             obterPastaDestino: () => Repo.LerConfig("backup_pasta", ""),
-            log: _ => { /* silencioso; erros nao derrubam o caixa */ });
+            log: _ => { /* silencioso; erros nao derrubam o caixa */ },
+            obterManter: () => int.TryParse(Repo.LerConfig("backup_manter", "10"), out var n) ? n : 10);
         IniciarAutoBackup();
     }
 
@@ -64,6 +65,11 @@ public sealed class Servico : IDisposable
     public int IntervaloBackupMin => int.TryParse(Repo.LerConfig("backup_intervalo_min", "0"), out var m) ? m : 0;
     public void DefinirPastaBackup(string p) => Repo.SalvarConfig("backup_pasta", p);
     public void DefinirIntervaloBackup(int min) { Repo.SalvarConfig("backup_intervalo_min", min.ToString()); IniciarAutoBackup(); }
+    /// <summary>Quantos backups manter ao limpar antigos (0 = manter todos). Padrao 10.</summary>
+    public int BackupsManter => int.TryParse(Repo.LerConfig("backup_manter", "10"), out var n) ? n : 10;
+    public void DefinirBackupsManter(int n) => Repo.SalvarConfig("backup_manter", Math.Max(0, n).ToString());
+    /// <summary>Total de vendas no banco (para o resumo de "saude" da tela de backup).</summary>
+    public int TotalVendas() => Repo.ListarVendas().Count;
 
     public List<Produto> Produtos() => Repo.ListarProdutos().Where(p => p.Ativo).ToList();
     /// <summary>Catalogo completo (inclui inativos) para a tela de gestao.</summary>
@@ -136,6 +142,29 @@ public sealed class Servico : IDisposable
         TurnoAtual.Fechamento = DateTime.Now;
         TurnoAtual = null;
         Log.Info($"Caixa FECHADO #{id}");
+
+        // BACKUP AUTOMATICO ao fechar o caixa: fim de turno e o momento natural para garantir
+        // os dados do dia. Best-effort: nunca derruba o fechamento se o backup falhar.
+        BackupAutomaticoAoFechar();
+    }
+
+    /// <summary>Gera backup ao fechar o caixa e limpa antigos (se ha pasta configurada).</summary>
+    private void BackupAutomaticoAoFechar()
+    {
+        var pasta = PastaBackup;
+        if (string.IsNullOrWhiteSpace(pasta)) return;   // sem pasta -> nao faz (nada a fazer)
+        try
+        {
+            var zip = BackupManager.GerarZip(CaminhoBanco, pasta);
+            Log.Info($"Backup automatico (fechamento) gerado: {zip}");
+            int manter = BackupsManter;
+            if (manter > 0)
+            {
+                int apagados = BackupManager.LimparAntigos(pasta, manter);
+                if (apagados > 0) Log.Info($"Backup: {apagados} antigo(s) apagado(s) (mantendo {manter}).");
+            }
+        }
+        catch (Exception ex) { Log.Aviso($"Backup automatico ao fechar falhou: {ex.Message}"); }
     }
 
     /// <summary>
@@ -190,6 +219,26 @@ public sealed class Servico : IDisposable
         return Repo.ListarVendasPorCaixa(TurnoAtual.Id);
     }
 
+    /// <summary>
+    /// Exporta o turno atual em DOIS CSVs numa pasta (resumo + lista detalhada de vendas),
+    /// a QUALQUER momento (nao precisa fechar o caixa). Retorna os caminhos gerados.
+    /// 'prefixo' compoe o nome dos arquivos (ex: "festa-20260704-1930").
+    /// </summary>
+    public (string resumo, string vendas) ExportarCsvTurno(string pastaDestino, string prefixo)
+    {
+        Directory.CreateDirectory(pastaDestino);
+        var resumo = ResumoTurnoAtual();
+        var itens = ItensVendidosTurno();
+        var vendas = VendasDoTurno();
+
+        var pResumo = Path.Combine(pastaDestino, $"{prefixo}_resumo.csv");
+        var pVendas = Path.Combine(pastaDestino, $"{prefixo}_vendas.csv");
+        var utf8Bom = new System.Text.UTF8Encoding(true);   // BOM: Excel abre com acento certo
+        File.WriteAllText(pResumo, ExportadorCsv.Resumo(resumo, itens), utf8Bom);
+        File.WriteAllText(pVendas, ExportadorCsv.Vendas(vendas), utf8Bom);
+        return (pResumo, pVendas);
+    }
+
     /// <summary>Estorna (cancela) uma venda: soft delete + rastro no log.</summary>
     public void CancelarVenda(long vendaId)
     {
@@ -218,20 +267,34 @@ public sealed class Servico : IDisposable
     }
 
     /// <summary>
-    /// MODO DEMONSTRACAO (gravacao do video): PDV_DEMO=1 faz o app fingir que imprimiu
-    /// com sucesso, sem tocar em hardware. Assim a demo nunca abre o popup de "erro na
-    /// impressora" — nao ha impressora conectada porque e so uma gravacao.
+    /// Quando true, NUNCA envia para a impressora fisica (finge sucesso). Flag de INSTANCIA
+    /// (nao global) para os TESTES ligarem sem corrida entre threads. Testes de venda devem
+    /// ligar isto para nunca imprimir de verdade. Default: respeita PDV_DEMO (video).
     /// </summary>
-    private static bool ModoDemo => Environment.GetEnvironmentVariable("PDV_DEMO") == "1";
+    public bool ImpressaoSimulada { get; set; }
 
-    /// <summary>Imprime (ou reimprime) o cupom de uma venda usando o layout configurado.</summary>
+    /// <summary>
+    /// MODO DEMONSTRACAO (gravacao do video): PDV_DEMO=1 faz o app fingir que imprimiu
+    /// com sucesso, sem tocar em hardware. Combinado com a flag de instancia acima.
+    /// </summary>
+    private bool ModoDemo => ImpressaoSimulada || Environment.GetEnvironmentVariable("PDV_DEMO") == "1";
+
+    /// <summary>
+    /// Imprime (ou reimprime) o cupom de uma venda usando o layout configurado.
+    /// SEGURANCA: nao imprime venda CANCELADA (estornada). Ao imprimir com sucesso, registra
+    /// a impressao (contador de vias) para o Historico mostrar quantas vezes a nota saiu.
+    /// </summary>
     public (bool ok, string msg) ImprimirVenda(Venda venda)
     {
-        if (ModoDemo) return (true, "OK (demo)");
+        if (venda.Cancelada)
+            return (false, "Venda CANCELADA (estornada) nao pode ser reimpressa.");
+        if (ModoDemo) { venda.Impressoes = Repo.RegistrarImpressao(venda.Id); return (true, "OK (demo)"); }
         var impressora = ImpressoraPadrao;
         if (string.IsNullOrWhiteSpace(impressora))
             return (false, "Nenhuma impressora configurada (F12).");
-        return EscPosPrinter.ImprimirTicket(impressora, venda, LerConfigCupom());
+        var (ok, msg) = EscPosPrinter.ImprimirTicket(impressora, venda, LerConfigCupom());
+        if (ok) venda.Impressoes = Repo.RegistrarImpressao(venda.Id);   // conta 1a via + reimpressoes
+        return (ok, msg);
     }
 
     /// <summary>Imprime a Leitura Z do turno atual.</summary>

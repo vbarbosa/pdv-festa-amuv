@@ -22,6 +22,10 @@ public sealed class PromocaoSeed
     public int DescontoCentavos { get; set; }
     public string? HoraInicio { get; set; }
     public string? HoraFim { get; set; }
+    /// <summary>Datas "yyyy-MM-dd" (opcionais); dias "Sabado,Domingo" ou "Todos" (opcional).</summary>
+    public string? DataInicio { get; set; }
+    public string? DataFim { get; set; }
+    public string? Dias { get; set; }
     public List<PromocaoItem> Itens { get; set; } = new();
 
     public Promocao ParaPromocao() => new()
@@ -32,9 +36,22 @@ public sealed class PromocaoSeed
         ValorDescontoCentavos = DescontoCentavos,
         HoraInicio = TimeSpan.TryParse(HoraInicio, out var hi) ? hi : null,
         HoraFim = TimeSpan.TryParse(HoraFim, out var hf) ? hf : null,
+        DataInicio = DateTime.TryParse(DataInicio, out var di) ? di.Date : null,
+        DataFim = DateTime.TryParse(DataFim, out var df) ? df.Date : null,
+        Dias = ParsearDias(Dias),
         Ativo = true,
         Itens = Itens
     };
+
+    /// <summary>"Sabado,Domingo" -> flags; vazio/"Todos" -> Todos (vale todo dia).</summary>
+    private static DiasSemana ParsearDias(string? txt)
+    {
+        if (string.IsNullOrWhiteSpace(txt)) return DiasSemana.Todos;
+        var res = DiasSemana.Nenhum;
+        foreach (var parte in txt.Split(',', StringSplitOptions.RemoveEmptyEntries | StringSplitOptions.TrimEntries))
+            if (Enum.TryParse<DiasSemana>(parte, ignoreCase: true, out var d)) res |= d;
+        return res == DiasSemana.Nenhum ? DiasSemana.Todos : res;
+    }
 }
 
 /// <summary>Carrega o cardapio do arquivo JSON e faz o seed inicial do banco.</summary>

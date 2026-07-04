@@ -54,4 +54,37 @@ public static class Dialogos
         if (!perm.ExigeSenha(acao)) return true;      // liberada -> sem senha
         return LiberarAdmin(owner, servico);          // exige -> pede a senha
     }
+
+    /// <summary>
+    /// Fluxo compartilhado de "Exportar CSV do turno": pergunta a pasta, gera os 2 arquivos
+    /// (resumo + vendas) e avisa. Usado pelo Historico (F3) e pelo menu Arquivo, a qualquer
+    /// momento (nao precisa fechar o caixa). Nao exige turno aberto — exporta o que houver.
+    /// </summary>
+    public static void ExportarCsvComDialogo(IWin32Window owner, Servico servico)
+    {
+        // trava configuravel: exportar dados financeiros pode exigir senha de admin.
+        if (!LiberarAcao(owner, servico, AcaoProtegida.ExportarCsv)) return;
+
+        using var dlg = new FolderBrowserDialog { Description = "Escolha a pasta para salvar os CSVs do turno" };
+        var desktop = Environment.GetFolderPath(Environment.SpecialFolder.DesktopDirectory);
+        if (Directory.Exists(desktop)) dlg.SelectedPath = desktop;
+        if (dlg.ShowDialog(owner) != DialogResult.OK) return;
+
+        try
+        {
+            var prefixo = $"festa-{DateTime.Now:yyyyMMdd-HHmm}";
+            var (resumo, vendas) = servico.ExportarCsvTurno(dlg.SelectedPath, prefixo);
+            MessageBox.Show(
+                "CSVs exportados:\n\n" +
+                $"- Resumo: {Path.GetFileName(resumo)}\n" +
+                $"- Vendas: {Path.GetFileName(vendas)}\n\n" +
+                $"Pasta: {dlg.SelectedPath}",
+                "Exportar CSV", MessageBoxButtons.OK, MessageBoxIcon.Information);
+        }
+        catch (Exception ex)
+        {
+            MessageBox.Show("Erro ao exportar CSV: " + ex.Message, "Exportar CSV",
+                MessageBoxButtons.OK, MessageBoxIcon.Warning);
+        }
+    }
 }

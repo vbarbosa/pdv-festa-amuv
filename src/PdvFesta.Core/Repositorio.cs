@@ -58,7 +58,8 @@ CREATE TABLE IF NOT EXISTS vendas (
     troco_cent    INTEGER NOT NULL DEFAULT 0,
     operador      TEXT NOT NULL DEFAULT '',
     caixa_id      INTEGER NULL,
-    status        INTEGER NOT NULL DEFAULT 0
+    status        INTEGER NOT NULL DEFAULT 0,
+    impressoes    INTEGER NOT NULL DEFAULT 0
 );
 
 CREATE TABLE IF NOT EXISTS caixa (
@@ -109,6 +110,9 @@ CREATE TABLE IF NOT EXISTS promocoes (
     valor_desc_cent INTEGER NOT NULL DEFAULT 0,
     hora_inicio     TEXT NULL,
     hora_fim        TEXT NULL,
+    data_inicio     TEXT NULL,
+    data_fim        TEXT NULL,
+    dias_semana     INTEGER NOT NULL DEFAULT 127,
     ativo           INTEGER NOT NULL DEFAULT 1
 );
 
@@ -121,6 +125,32 @@ CREATE INDEX IF NOT EXISTS ix_promoitens ON promocao_itens(promocao_id);";
         cmd.ExecuteNonQuery();
 
         MigrarColunasVendas(conn);
+        MigrarColunasPromocoes(conn);
+    }
+
+    /// <summary>
+    /// Migracao suave de 'promocoes': bancos antigos ganham as colunas de agendamento avancado
+    /// (intervalo de datas + dias da semana). Default dias_semana=127 (todos) preserva o
+    /// comportamento antigo (promo valia todo dia).
+    /// </summary>
+    private static void MigrarColunasPromocoes(SqliteConnection conn)
+    {
+        var colunas = new HashSet<string>(StringComparer.OrdinalIgnoreCase);
+        using (var check = conn.CreateCommand())
+        {
+            check.CommandText = "PRAGMA table_info(promocoes);";
+            using var r = check.ExecuteReader();
+            while (r.Read()) colunas.Add(r.GetString(1));
+        }
+        void AddColuna(string ddl)
+        {
+            using var alter = conn.CreateCommand();
+            alter.CommandText = ddl;
+            alter.ExecuteNonQuery();
+        }
+        if (!colunas.Contains("data_inicio")) AddColuna("ALTER TABLE promocoes ADD COLUMN data_inicio TEXT NULL;");
+        if (!colunas.Contains("data_fim"))    AddColuna("ALTER TABLE promocoes ADD COLUMN data_fim TEXT NULL;");
+        if (!colunas.Contains("dias_semana")) AddColuna("ALTER TABLE promocoes ADD COLUMN dias_semana INTEGER NOT NULL DEFAULT 127;");
     }
 
     /// <summary>
@@ -145,8 +175,9 @@ CREATE INDEX IF NOT EXISTS ix_promoitens ON promocao_itens(promocao_id);";
             alter.CommandText = ddl;
             alter.ExecuteNonQuery();
         }
-        if (!colunas.Contains("caixa_id")) AddColuna("ALTER TABLE vendas ADD COLUMN caixa_id INTEGER NULL;");
-        if (!colunas.Contains("status"))   AddColuna("ALTER TABLE vendas ADD COLUMN status INTEGER NOT NULL DEFAULT 0;");
+        if (!colunas.Contains("caixa_id"))   AddColuna("ALTER TABLE vendas ADD COLUMN caixa_id INTEGER NULL;");
+        if (!colunas.Contains("status"))     AddColuna("ALTER TABLE vendas ADD COLUMN status INTEGER NOT NULL DEFAULT 0;");
+        if (!colunas.Contains("impressoes")) AddColuna("ALTER TABLE vendas ADD COLUMN impressoes INTEGER NOT NULL DEFAULT 0;");
 
         // Agora as colunas existem com certeza: cria o indice.
         using var idx = conn.CreateCommand();
@@ -241,7 +272,7 @@ VALUES ($vid, $pid, $nome, $preco, $qtd);";
 
         using (var cmd = conn.CreateCommand())
         {
-            cmd.CommandText = "SELECT id, data_hora, total_cent, forma, recebido_cent, troco_cent, operador, caixa_id, status FROM vendas ORDER BY id;";
+            cmd.CommandText = "SELECT id, data_hora, total_cent, forma, recebido_cent, troco_cent, operador, caixa_id, status, impressoes FROM vendas ORDER BY id;";
             using var r = cmd.ExecuteReader();
             while (r.Read())
             {
@@ -255,7 +286,8 @@ VALUES ($vid, $pid, $nome, $preco, $qtd);";
                     TrocoCentavos = r.GetInt32(5),
                     Operador = r.GetString(6),
                     CaixaId = r.IsDBNull(7) ? null : r.GetInt64(7),
-                    Status = (StatusVenda)r.GetInt32(8)
+                    Status = (StatusVenda)r.GetInt32(8),
+                    Impressoes = r.IsDBNull(9) ? 0 : r.GetInt32(9)
                 };
                 vendas[v.Id] = v;
             }
@@ -295,6 +327,22 @@ VALUES ($vid, $pid, $nome, $preco, $qtd);";
         cmd.CommandText = "UPDATE vendas SET status = 1 WHERE id = $id;";
         cmd.Parameters.AddWithValue("$id", vendaId);
         cmd.ExecuteNonQuery();
+    }
+
+    /// <summary>
+    /// Incrementa e retorna o contador de impressoes de uma venda (1a via + reimpressoes).
+    /// Chamado apos cada impressao BEM-SUCEDIDA do cupom, para o Historico mostrar quantas
+    /// vezes a nota saiu (controle contra reimpressao indevida).
+    /// </summary>
+    public int RegistrarImpressao(long vendaId)
+    {
+        using var conn = Abrir();
+        using var cmd = conn.CreateCommand();
+        cmd.CommandText = "UPDATE vendas SET impressoes = impressoes + 1 WHERE id = $id; " +
+                          "SELECT impressoes FROM vendas WHERE id = $id;";
+        cmd.Parameters.AddWithValue("$id", vendaId);
+        var r = cmd.ExecuteScalar();
+        return r is long n ? (int)n : 0;
     }
 
     // ---------- CATALOGO ----------
@@ -377,8 +425,8 @@ VALUES ($id, $nome, $preco, $cat, $atalho, $ativo, $comp);";
             {
                 cmd.Transaction = tx;
                 cmd.CommandText = @"
-INSERT INTO vendas (id, data_hora, total_cent, forma, recebido_cent, troco_cent, operador, caixa_id, status)
-VALUES ($id, $dh, $total, $forma, $rec, $troco, $op, $caixa, $status);";
+INSERT INTO vendas (id, data_hora, total_cent, forma, recebido_cent, troco_cent, operador, caixa_id, status, impressoes)
+VALUES ($id, $dh, $total, $forma, $rec, $troco, $op, $caixa, $status, $impr);";
                 cmd.Parameters.AddWithValue("$id", v.Id);
                 cmd.Parameters.AddWithValue("$dh", v.DataHora.ToString("o"));
                 cmd.Parameters.AddWithValue("$total", v.TotalCentavos);
@@ -388,6 +436,7 @@ VALUES ($id, $dh, $total, $forma, $rec, $troco, $op, $caixa, $status);";
                 cmd.Parameters.AddWithValue("$op", v.Operador);
                 cmd.Parameters.AddWithValue("$caixa", (object?)v.CaixaId ?? DBNull.Value);
                 cmd.Parameters.AddWithValue("$status", (int)v.Status);
+                cmd.Parameters.AddWithValue("$impr", v.Impressoes);
                 cmd.ExecuteNonQuery();
             }
             foreach (var item in v.Itens)
@@ -578,9 +627,10 @@ ON CONFLICT(nome) DO UPDATE SET ordem = excluded.ordem, ativo = excluded.ativo;"
         var promos = new Dictionary<long, Promocao>();
         using (var cmd = conn.CreateCommand())
         {
+            const string cols = "id, descricao, tipo, valor_desc_cent, hora_inicio, hora_fim, data_inicio, data_fim, dias_semana, ativo";
             cmd.CommandText = incluirInativas
-                ? "SELECT id, descricao, tipo, valor_desc_cent, hora_inicio, hora_fim, ativo FROM promocoes ORDER BY id;"
-                : "SELECT id, descricao, tipo, valor_desc_cent, hora_inicio, hora_fim, ativo FROM promocoes WHERE ativo=1 ORDER BY id;";
+                ? $"SELECT {cols} FROM promocoes ORDER BY id;"
+                : $"SELECT {cols} FROM promocoes WHERE ativo=1 ORDER BY id;";
             using var r = cmd.ExecuteReader();
             while (r.Read())
             {
@@ -592,7 +642,10 @@ ON CONFLICT(nome) DO UPDATE SET ordem = excluded.ordem, ativo = excluded.ativo;"
                     ValorDescontoCentavos = r.GetInt32(3),
                     HoraInicio = r.IsDBNull(4) ? null : TimeSpan.Parse(r.GetString(4)),
                     HoraFim = r.IsDBNull(5) ? null : TimeSpan.Parse(r.GetString(5)),
-                    Ativo = r.GetInt32(6) == 1
+                    DataInicio = r.IsDBNull(6) ? null : DateTime.Parse(r.GetString(6), null, System.Globalization.DateTimeStyles.RoundtripKind),
+                    DataFim = r.IsDBNull(7) ? null : DateTime.Parse(r.GetString(7), null, System.Globalization.DateTimeStyles.RoundtripKind),
+                    Dias = (DiasSemana)r.GetInt32(8),
+                    Ativo = r.GetInt32(9) == 1
                 };
                 promos[p.Id] = p;
             }
@@ -619,11 +672,11 @@ ON CONFLICT(nome) DO UPDATE SET ordem = excluded.ordem, ativo = excluded.ativo;"
         {
             cmd.Transaction = tx;
             if (id <= 0)
-                cmd.CommandText = @"INSERT INTO promocoes (descricao,tipo,valor_desc_cent,hora_inicio,hora_fim,ativo)
-VALUES ($d,$t,$v,$hi,$hf,$a); SELECT last_insert_rowid();";
+                cmd.CommandText = @"INSERT INTO promocoes (descricao,tipo,valor_desc_cent,hora_inicio,hora_fim,data_inicio,data_fim,dias_semana,ativo)
+VALUES ($d,$t,$v,$hi,$hf,$di,$df,$ds,$a); SELECT last_insert_rowid();";
             else
             {
-                cmd.CommandText = "UPDATE promocoes SET descricao=$d,tipo=$t,valor_desc_cent=$v,hora_inicio=$hi,hora_fim=$hf,ativo=$a WHERE id=$id;";
+                cmd.CommandText = "UPDATE promocoes SET descricao=$d,tipo=$t,valor_desc_cent=$v,hora_inicio=$hi,hora_fim=$hf,data_inicio=$di,data_fim=$df,dias_semana=$ds,ativo=$a WHERE id=$id;";
                 cmd.Parameters.AddWithValue("$id", id);
             }
             cmd.Parameters.AddWithValue("$d", p.Descricao);
@@ -631,6 +684,9 @@ VALUES ($d,$t,$v,$hi,$hf,$a); SELECT last_insert_rowid();";
             cmd.Parameters.AddWithValue("$v", p.ValorDescontoCentavos);
             cmd.Parameters.AddWithValue("$hi", (object?)p.HoraInicio?.ToString("hh\\:mm") ?? DBNull.Value);
             cmd.Parameters.AddWithValue("$hf", (object?)p.HoraFim?.ToString("hh\\:mm") ?? DBNull.Value);
+            cmd.Parameters.AddWithValue("$di", (object?)p.DataInicio?.Date.ToString("o") ?? DBNull.Value);
+            cmd.Parameters.AddWithValue("$df", (object?)p.DataFim?.Date.ToString("o") ?? DBNull.Value);
+            cmd.Parameters.AddWithValue("$ds", (int)p.Dias);
             cmd.Parameters.AddWithValue("$a", p.Ativo ? 1 : 0);
             id = id <= 0 ? (long)(cmd.ExecuteScalar() ?? 0L) : (cmd.ExecuteNonQuery() >= 0 ? id : id);
         }

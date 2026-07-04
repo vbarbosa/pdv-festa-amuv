@@ -22,6 +22,12 @@ public sealed class FormPromocoes : Form
     private readonly CheckBox _chkHorario = new();
     private readonly DateTimePicker _dtpInicio = new();
     private readonly DateTimePicker _dtpFim = new();
+    // agendamento avancado: intervalo de datas + dias da semana
+    private readonly CheckBox _chkDatas = new();
+    private readonly DateTimePicker _dtpData1 = new();
+    private readonly DateTimePicker _dtpData2 = new();
+    private readonly CheckBox _chkDias = new();
+    private readonly CheckBox[] _chkDia = new CheckBox[7];   // Dom..Sab
     private readonly ComboBox _cmbProduto = new();
     private readonly NumericUpDown _numQtd = new();
     private readonly ListBox _lstItens = new();
@@ -83,13 +89,35 @@ public sealed class FormPromocoes : Form
         Full(_chkAtivo);
 
         _chkHorario.Text = "Restringir por horário"; _chkHorario.Dock = DockStyle.Fill;
-        _chkHorario.CheckedChanged += (s, e) => AtualizarEstadoHorario();
+        _chkHorario.CheckedChanged += (s, e) => AtualizarEstadoAgendamento();
         Full(_chkHorario);
 
         _dtpInicio.Format = DateTimePickerFormat.Time; _dtpInicio.ShowUpDown = true; _dtpInicio.Dock = DockStyle.Fill;
         _dtpFim.Format = DateTimePickerFormat.Time; _dtpFim.ShowUpDown = true; _dtpFim.Dock = DockStyle.Fill;
         Linha("Das (hora):", _dtpInicio);
         Linha("Até (hora):", _dtpFim);
+
+        // ---- intervalo de DATAS (de/ate; para 1 dia so, ponha a mesma data nos dois) ----
+        _chkDatas.Text = "Restringir por data (período)"; _chkDatas.Dock = DockStyle.Fill;
+        _chkDatas.CheckedChanged += (s, e) => AtualizarEstadoAgendamento();
+        Full(_chkDatas);
+        _dtpData1.Format = DateTimePickerFormat.Short; _dtpData1.Dock = DockStyle.Fill;
+        _dtpData2.Format = DateTimePickerFormat.Short; _dtpData2.Dock = DockStyle.Fill;
+        Linha("De (dia):", _dtpData1);
+        Linha("Até (dia):", _dtpData2);
+
+        // ---- DIAS DA SEMANA (checkboxes Dom..Sab) ----
+        _chkDias.Text = "Só em certos dias da semana"; _chkDias.Dock = DockStyle.Fill;
+        _chkDias.CheckedChanged += (s, e) => AtualizarEstadoAgendamento();
+        Full(_chkDias);
+        var nomesDia = new[] { "Dom", "Seg", "Ter", "Qua", "Qui", "Sex", "Sab" };
+        var painelDias = new FlowLayoutPanel { Dock = DockStyle.Fill, Height = 32, AutoSize = true, Margin = new Padding(0) };
+        for (int i = 0; i < 7; i++)
+        {
+            _chkDia[i] = new CheckBox { Text = nomesDia[i], AutoSize = true, Margin = new Padding(2, 4, 2, 0) };
+            painelDias.Controls.Add(_chkDia[i]);
+        }
+        Full(painelDias);
 
         Full(new Label { Text = "ITENS EXIGIDOS (produto x qtd):", Font = new Font("Segoe UI", 10F, FontStyle.Bold), Height = 26, Dock = DockStyle.Fill });
         _cmbProduto.Dock = DockStyle.Fill; _cmbProduto.DropDownStyle = ComboBoxStyle.DropDownList;
@@ -125,13 +153,14 @@ public sealed class FormPromocoes : Form
         _grid.Columns.Add("tipo", "Tipo");
         _grid.Columns.Add("desc2", "Desconto");
         _grid.Columns.Add("hora", "Horário");
+        _grid.Columns.Add("agenda", "Agenda");
         _grid.Columns.Add("ativo", "Ativa");
         _grid.SelectionChanged += (s, e) => SelecionarLinha();
 
         Controls.Add(_grid);
         Controls.Add(painel);
 
-        AtualizarEstadoHorario();
+        AtualizarEstadoAgendamento();
     }
 
     private static Button Botao(string t, Color cor, int w, EventHandler onClick)
@@ -140,10 +169,31 @@ public sealed class FormPromocoes : Form
         b.Click += onClick; return b;
     }
 
-    private void AtualizarEstadoHorario()
+    private void AtualizarEstadoAgendamento()
     {
         _dtpInicio.Enabled = _chkHorario.Checked;
         _dtpFim.Enabled = _chkHorario.Checked;
+        _dtpData1.Enabled = _chkDatas.Checked;
+        _dtpData2.Enabled = _chkDatas.Checked;
+        foreach (var c in _chkDia) c.Enabled = _chkDias.Checked;
+    }
+
+    /// <summary>Le os checkboxes Dom..Sab e monta as flags DiasSemana. Nenhum marcado = Todos.</summary>
+    private DiasSemana LerDiasSelecionados()
+    {
+        var bits = new[] { DiasSemana.Domingo, DiasSemana.Segunda, DiasSemana.Terca, DiasSemana.Quarta,
+                           DiasSemana.Quinta, DiasSemana.Sexta, DiasSemana.Sabado };
+        var res = DiasSemana.Nenhum;
+        for (int i = 0; i < 7; i++) if (_chkDia[i].Checked) res |= bits[i];
+        return res == DiasSemana.Nenhum ? DiasSemana.Todos : res;
+    }
+
+    /// <summary>Marca os checkboxes Dom..Sab a partir das flags. Todos = todos marcados.</summary>
+    private void AplicarDiasNaTela(DiasSemana dias)
+    {
+        var bits = new[] { DiasSemana.Domingo, DiasSemana.Segunda, DiasSemana.Terca, DiasSemana.Quarta,
+                           DiasSemana.Quinta, DiasSemana.Sexta, DiasSemana.Sabado };
+        for (int i = 0; i < 7; i++) _chkDia[i].Checked = (dias & bits[i]) != 0;
     }
 
     private void CarregarProdutos()
@@ -163,8 +213,30 @@ public sealed class FormPromocoes : Form
             string horario = p.HoraInicio is not null && p.HoraFim is not null
                 ? $"{p.HoraInicio:hh\\:mm}-{p.HoraFim:hh\\:mm}" : "sempre";
             _grid.Rows.Add(p.Id, p.Descricao, p.Tipo == TipoPromocao.Combo ? "Combo" : "Preco Esp.",
-                CupomFormatter.Moeda(p.ValorDescontoCentavos), horario, p.Ativo ? "Sim" : "NAO");
+                CupomFormatter.Moeda(p.ValorDescontoCentavos), horario, ResumoAgenda(p), p.Ativo ? "Sim" : "NAO");
         }
+    }
+
+    /// <summary>Resumo curto do agendamento (datas + dias) para a coluna "Agenda" do grid.</summary>
+    private static string ResumoAgenda(Promocao p)
+    {
+        var partes = new List<string>();
+        if (p.DataInicio is DateTime di && p.DataFim is DateTime df)
+            partes.Add(di.Date == df.Date ? di.ToString("dd/MM") : $"{di:dd/MM}-{df:dd/MM}");
+        else if (p.DataInicio is DateTime di2) partes.Add($"a partir {di2:dd/MM}");
+        else if (p.DataFim is DateTime df2) partes.Add($"ate {df2:dd/MM}");
+
+        if (p.Dias != DiasSemana.Todos && p.Dias != DiasSemana.Nenhum)
+        {
+            var nomes = new (DiasSemana bit, string txt)[]
+            {
+                (DiasSemana.Domingo, "Dom"), (DiasSemana.Segunda, "Seg"), (DiasSemana.Terca, "Ter"),
+                (DiasSemana.Quarta, "Qua"), (DiasSemana.Quinta, "Qui"), (DiasSemana.Sexta, "Sex"),
+                (DiasSemana.Sabado, "Sab")
+            };
+            partes.Add(string.Join("/", nomes.Where(n => (p.Dias & n.bit) != 0).Select(n => n.txt)));
+        }
+        return partes.Count == 0 ? "todo dia" : string.Join("  ", partes);
     }
 
     private void SelecionarLinha()
@@ -181,10 +253,18 @@ public sealed class FormPromocoes : Form
         _chkHorario.Checked = p.HoraInicio is not null;
         if (p.HoraInicio is not null) _dtpInicio.Value = DateTime.Today.Add(p.HoraInicio.Value);
         if (p.HoraFim is not null) _dtpFim.Value = DateTime.Today.Add(p.HoraFim.Value);
+
+        // agendamento avancado: datas + dias da semana
+        _chkDatas.Checked = p.DataInicio is not null || p.DataFim is not null;
+        if (p.DataInicio is DateTime di) _dtpData1.Value = di;
+        if (p.DataFim is DateTime df) _dtpData2.Value = df;
+        _chkDias.Checked = p.Dias != DiasSemana.Todos && p.Dias != DiasSemana.Nenhum;
+        AplicarDiasNaTela(p.Dias == DiasSemana.Nenhum ? DiasSemana.Todos : p.Dias);
+
         _itensEdit.Clear();
         _itensEdit.AddRange(p.Itens.Select(i => new PromocaoItem { ProdutoId = i.ProdutoId, Quantidade = i.Quantidade }));
         RedesenharItens();
-        AtualizarEstadoHorario();
+        AtualizarEstadoAgendamento();
         _lblStatus.Text = $"Editando: {p.Descricao}";
     }
 
@@ -219,7 +299,9 @@ public sealed class FormPromocoes : Form
         _txtDesc.Text = ""; _cmbTipo.SelectedIndex = 0; _txtDesconto.Text = "0,00";
         _chkAtivo.Checked = true; _chkHorario.Checked = false;
         _dtpInicio.Value = DateTime.Today.AddHours(8); _dtpFim.Value = DateTime.Today.AddHours(20);
-        _itensEdit.Clear(); RedesenharItens(); AtualizarEstadoHorario();
+        _chkDatas.Checked = false; _dtpData1.Value = DateTime.Today; _dtpData2.Value = DateTime.Today;
+        _chkDias.Checked = false; AplicarDiasNaTela(DiasSemana.Todos);
+        _itensEdit.Clear(); RedesenharItens(); AtualizarEstadoAgendamento();
         _lblStatus.Text = "Nova promocao.";
         _txtDesc.Focus();
     }
@@ -232,6 +314,15 @@ public sealed class FormPromocoes : Form
         if (valor is null or 0) { Aviso("Informe o desconto (ex: 2,00)."); return; }
         if (_itensEdit.Count == 0) { Aviso("Adicione ao menos 1 item exigido."); return; }
 
+        // datas: aceita de/ate em qualquer ordem (troca se o usuario inverteu).
+        DateTime? d1 = null, d2 = null;
+        if (_chkDatas.Checked)
+        {
+            d1 = _dtpData1.Value.Date;
+            d2 = _dtpData2.Value.Date;
+            if (d1 > d2) (d1, d2) = (d2, d1);
+        }
+
         var p = new Promocao
         {
             Id = _editandoId,
@@ -241,6 +332,9 @@ public sealed class FormPromocoes : Form
             Ativo = _chkAtivo.Checked,
             HoraInicio = _chkHorario.Checked ? _dtpInicio.Value.TimeOfDay : null,
             HoraFim = _chkHorario.Checked ? _dtpFim.Value.TimeOfDay : null,
+            DataInicio = d1,
+            DataFim = d2,
+            Dias = _chkDias.Checked ? LerDiasSelecionados() : DiasSemana.Todos,
             Itens = _itensEdit.Select(i => new PromocaoItem { ProdutoId = i.ProdutoId, Quantidade = i.Quantidade }).ToList()
         };
         _editandoId = _servico.SalvarPromocao(p);   // persiste + recarrega o cache; retorna o Id

@@ -13,6 +13,7 @@ public class PermissoesTests : IDisposable
     {
         _db = Path.Combine(Path.GetTempPath(), $"perm_{Guid.NewGuid():N}.db");
         _servico = new Servico(_db, cardapioPath: "___inexistente___.json");
+        _servico.ImpressaoSimulada = true;   // seguranca: jamais tocar a impressora nos testes
         _perm = new Permissoes(_servico);
     }
 
@@ -30,10 +31,19 @@ public class PermissoesTests : IDisposable
     [InlineData(AcaoProtegida.EstornarVenda, true)]
     [InlineData(AcaoProtegida.Backup, true)]
     [InlineData(AcaoProtegida.SangriaSuprimento, true)]
+    [InlineData(AcaoProtegida.ExportarCsv, true)]
     public void Default_AcoesCriticas_ExigemSenha(AcaoProtegida acao, bool esperado)
     {
         Assert.Equal(esperado, Permissoes.PadraoExigeSenha(acao));
         Assert.Equal(esperado, _perm.ExigeSenha(acao));
+    }
+
+    [Fact]
+    public void ExportarCsv_Configuravel_PodeSerLiberada()
+    {
+        Assert.True(_perm.ExigeSenha(AcaoProtegida.ExportarCsv));   // padrao exige
+        _perm.Definir(AcaoProtegida.ExportarCsv, false);
+        Assert.False(_perm.ExigeSenha(AcaoProtegida.ExportarCsv));  // admin pode liberar
     }
 
     [Theory]

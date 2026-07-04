@@ -16,7 +16,13 @@ public enum ModoCupom
     /// de "1x NOME" (uma por unidade fisica), separadas por pontilhado para rasgar e
     /// entregar nas barracas. Ex: 3x Cachorro -> 3 vales de "1x CACHORRO".
     /// </summary>
-    ReciboComVales = 2
+    ReciboComVales = 2,
+    /// <summary>
+    /// SO os VALES destacaveis (sem o recibo gerencial antes): cada unidade vira um vale
+    /// "1x NOME" com um MINI-CABECALHO da festa em cada ficha, separados por pontilhado.
+    /// Economiza papel (nao imprime o recibo) e cada ficha ja se identifica sozinha.
+    /// </summary>
+    SoVales = 3
 }
 
 /// <summary>Estilo grafico de uma linha do cupom (a camada ESC/POS traduz em bytes).</summary>
@@ -75,6 +81,7 @@ public sealed class ConfigCupom
             {
                 "0" => ModoCupom.Completo,
                 "1" => ModoCupom.FichaConsumo,
+                "3" => ModoCupom.SoVales,
                 _ => ModoCupom.ReciboComVales
             },
             SepararPorItem = repo.LerConfig(KSeparar, "0") == "1",

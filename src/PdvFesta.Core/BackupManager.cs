@@ -111,4 +111,54 @@ public static class BackupManager
         else
             RestaurarArquivo(arquivo, destinoDb);
     }
+
+    // ------------------------------------------------------------- gerenciamento
+
+    /// <summary>Um backup existente na pasta (para a tela listar/restaurar/limpar).</summary>
+    public readonly record struct BackupInfo(string Caminho, string Nome, DateTime Data, long Bytes)
+    {
+        /// <summary>Tamanho legivel: "1,2 MB", "340 KB".</summary>
+        public string TamanhoLegivel => Bytes >= 1024 * 1024
+            ? $"{Bytes / 1024d / 1024d:0.0} MB"
+            : $"{Math.Max(1, Bytes / 1024)} KB";
+    }
+
+    /// <summary>
+    /// Lista os backups (backup_pdv_*.zip e *.db) de uma pasta, do MAIS NOVO para o mais
+    /// antigo. Usa a data de escrita do arquivo. Retorna vazio se a pasta nao existe.
+    /// </summary>
+    public static List<BackupInfo> Listar(string pastaDir)
+    {
+        var lista = new List<BackupInfo>();
+        if (string.IsNullOrWhiteSpace(pastaDir) || !Directory.Exists(pastaDir)) return lista;
+        try
+        {
+            foreach (var f in Directory.EnumerateFiles(pastaDir, "backup_pdv_*.*"))
+            {
+                var ext = Path.GetExtension(f).ToLowerInvariant();
+                if (ext is not (".zip" or ".db")) continue;
+                var fi = new FileInfo(f);
+                lista.Add(new BackupInfo(f, fi.Name, fi.LastWriteTime, fi.Length));
+            }
+        }
+        catch { /* pasta inacessivel: retorna o que conseguiu */ }
+        return lista.OrderByDescending(b => b.Data).ToList();
+    }
+
+    /// <summary>O backup mais recente da pasta, ou null se nao ha nenhum.</summary>
+    public static BackupInfo? MaisRecente(string pastaDir) => Listar(pastaDir) is { Count: > 0 } l ? l[0] : null;
+
+    /// <summary>
+    /// Apaga os backups mais antigos, mantendo apenas os 'manter' mais recentes. Retorna
+    /// quantos foram apagados. Seguro: nunca lanca (best-effort por arquivo).
+    /// </summary>
+    public static int LimparAntigos(string pastaDir, int manter)
+    {
+        if (manter < 0) manter = 0;
+        var todos = Listar(pastaDir);
+        int apagados = 0;
+        foreach (var b in todos.Skip(manter))
+            try { File.Delete(b.Caminho); apagados++; } catch { /* ignora arquivo travado */ }
+        return apagados;
+    }
 }

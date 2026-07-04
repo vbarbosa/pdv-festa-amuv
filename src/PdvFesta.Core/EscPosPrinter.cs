@@ -90,7 +90,10 @@ public static class EscPosPrinter
     // Vales/expandida: SO altura dupla (largura normal) => fonte menor/mais estreita que a
     // 2x2, mas ainda grande e legivel de longe. Cabe o nome todo sem quebrar tanto.
     private static readonly byte[] ESC_DOUBLE_HEIGHT = { ESC, 0x21, 0x10 };
-    private static readonly byte[] GS_CUT_PAPER = { GS, 0x56, 0x01 };       // GS V 1 -> corte parcial SEM avanco extra (economiza bobina)
+    // GS V 1 -> corte parcial SEM avanco extra. E o comando que a MPT-II digere (testado): a
+    // variante 'GS V 66 n' (avanco parametrizado) TRAVA o firmware dela. O corte sai logo apos
+    // a ultima linha; o residuo de papel branco restante e a distancia fisica cabeca->lamina.
+    private static readonly byte[] GS_CUT_PAPER = { GS, 0x56, 0x01 };
     #endregion
 
     /// <summary>
@@ -105,6 +108,24 @@ public static class EscPosPrinter
         if (string.IsNullOrWhiteSpace(alvo))
             return (false, "Nenhuma impressora configurada.");
 
+        // TETO DE TEMPO: impressao NUNCA pode congelar o caixa. Se a impressora travar (cabo
+        // solto, spooler ocupado, firmware embolado), a operacao e abandonada apos 15s e a
+        // venda segue — o cupom pode ser reimpresso pelo Historico. Proteger o caixa > o papel.
+        try
+        {
+            var tarefa = System.Threading.Tasks.Task.Run(() => EnviarRawInterno(alvo, dados));
+            if (tarefa.Wait(TimeSpan.FromSeconds(15)))
+                return tarefa.Result;
+            return (false, "A impressora nao respondeu a tempo (15s). A venda foi salva — reimprima pelo Historico.");
+        }
+        catch (Exception ex)
+        {
+            return (false, "Falha ao imprimir: " + ex.Message);
+        }
+    }
+
+    private static (bool ok, string msg) EnviarRawInterno(string alvo, byte[] dados)
+    {
         var porta = ExtrairPortaCom(alvo);
         return porta is not null ? EnviarSerial(porta, dados) : EnviarSpooler(alvo, dados);
     }
@@ -201,24 +222,71 @@ public static class EscPosPrinter
                 }
                 catch { /* alguns drivers nao deixam setar; segue */ }
 
-                // (2) remove jobs presos em erro (Retained/Error) que travam a fila.
+                // (2) LIMPA A FILA antes de mandar o cupom novo. Cada cupom e enviado
+                // individualmente e sai na hora — entao QUALQUER job pre-existente aqui e lixo
+                // de uma tentativa anterior (job fantasma retido/preso que o Windows fica
+                // reprocessando sozinho e "imprime do nada"). Remover todos evita duplicata e
+                // o famoso cupom-fantasma. So mexe na fila DESTA impressora.
                 try
                 {
                     using var jobs = new System.Management.ManagementObjectSearcher(
                         $"SELECT * FROM Win32_PrintJob WHERE Name LIKE '{impressora.Replace("'", "''")},%'");
                     foreach (System.Management.ManagementObject j in jobs.Get())
-                    {
-                        var status = j["JobStatus"]?.ToString() ?? "";
-                        if (status.Contains("Error", StringComparison.OrdinalIgnoreCase) ||
-                            status.Contains("Retained", StringComparison.OrdinalIgnoreCase) ||
-                            status.Contains("Blocked", StringComparison.OrdinalIgnoreCase))
-                            try { j.Delete(); } catch { }
-                    }
+                        try { j.Delete(); } catch { }
                 }
                 catch { /* sem jobs ou WMI indisponivel */ }
             }
         }
         catch { /* WMI totalmente indisponivel: segue sem preparar */ }
+
+        // (3) SALVAGUARDA: um job travado JA EM IMPRESSAO ("Error | Printing") nao sai com
+        // j.Delete() — fica agarrado no spooler e bloqueia TODOS os proximos cupons (foi o
+        // que derrubou a fila no teste de campo). Se ainda houver job preso apos o passo (2),
+        // reinicia o spooler do usuario, que e o unico jeito de solta-lo. Best-effort e seguro.
+        if (HaJobPresoAposLimpeza(impressora))
+            ReiniciarSpoolerBestEffort();
+    }
+
+    /// <summary>Sobrou algum job em erro/impressao presa apos a tentativa de limpeza?</summary>
+    private static bool HaJobPresoAposLimpeza(string impressora)
+    {
+        try
+        {
+            using var jobs = new System.Management.ManagementObjectSearcher(
+                $"SELECT JobStatus FROM Win32_PrintJob WHERE Name LIKE '{impressora.Replace("'", "''")},%'");
+            foreach (var j in jobs.Get())
+            {
+                var s = j["JobStatus"]?.ToString() ?? "";
+                if (s.Contains("Error", StringComparison.OrdinalIgnoreCase) ||
+                    s.Contains("Offline", StringComparison.OrdinalIgnoreCase) ||
+                    s.Contains("Retained", StringComparison.OrdinalIgnoreCase) ||
+                    s.Contains("Blocked", StringComparison.OrdinalIgnoreCase))
+                    return true;
+            }
+        }
+        catch { }
+        return false;
+    }
+
+    /// <summary>
+    /// Reinicia o servico Spooler para soltar job agarrado (Error|Printing). Roda no contexto
+    /// do usuario; se nao tiver permissao, apenas ignora (o cupom seguinte tentara mesmo assim).
+    /// NUNCA lanca — proteger o caixa e prioridade sobre limpar a fila.
+    /// </summary>
+    private static void ReiniciarSpoolerBestEffort()
+    {
+        try
+        {
+            using var sc = new System.ServiceProcess.ServiceController("Spooler");
+            if (sc.Status == System.ServiceProcess.ServiceControllerStatus.Running)
+            {
+                sc.Stop();
+                sc.WaitForStatus(System.ServiceProcess.ServiceControllerStatus.Stopped, TimeSpan.FromSeconds(5));
+            }
+            sc.Start();
+            sc.WaitForStatus(System.ServiceProcess.ServiceControllerStatus.Running, TimeSpan.FromSeconds(5));
+        }
+        catch { /* sem permissao / servico ocupado: segue — nao derruba o caixa */ }
     }
 
     /// <summary>Imprime o ticket de consumo respeitando o modo/layout configurado.</summary>
@@ -245,7 +313,12 @@ public static class EscPosPrinter
         return ImprimirTicket(impressora, venda, cfg);
     }
 
-    /// <summary>Cupom de teste (status OK) para a tela de configuracao de impressora.</summary>
+    /// <summary>
+    /// Cupom de teste (status OK) para a tela de configuracao de impressora. Ao contrario de um
+    /// cupom de venda, o teste CONFIRMA o resultado: apos enviar, olha a fila do Windows por
+    /// alguns instantes. Se o job travar em erro (aparelho desligado/sem papel), devolve ok=false
+    /// com a causa — em vez do falso "enviado!". Assim o operador so ve verde se saiu papel.
+    /// </summary>
     public static (bool ok, string msg) ImprimirTeste(string impressora)
     {
         var linhas = new List<LinhaCupom>
@@ -259,7 +332,49 @@ public static class EscPosPrinter
             new(CupomFormatter.Centralizar("Acentos: cao pao acai")),
             new(CupomFormatter.Centralizar("Tudo certo! :)")),
         };
-        return EnviarRaw(impressora, MontarBytes(linhas));
+        var (ok, msg) = EnviarRaw(impressora, MontarBytes(linhas));
+        if (!ok) return (false, msg);
+
+        // porta COM/serial nao tem fila do Windows para inspecionar: o envio ja e a confirmacao.
+        if (impressora.StartsWith("COM", StringComparison.OrdinalIgnoreCase))
+            return (true, msg);
+
+        // fila USB/Windows: confirma que o job REALMENTE saiu (nao ficou preso em erro).
+        return ConfirmarSaidaDoJob(impressora);
+    }
+
+    /// <summary>
+    /// Espera ate ~4s a fila do Windows drenar o teste. Se algum job travar em Error/Offline,
+    /// devolve ok=false com a causa (impressora provavelmente desligada). Se a fila esvaziar,
+    /// ok=true (saiu papel). Best-effort: se WMI falhar, assume enviado.
+    /// </summary>
+    private static (bool ok, string msg) ConfirmarSaidaDoJob(string impressora)
+    {
+        try
+        {
+            var filtro = $"SELECT JobStatus FROM Win32_PrintJob WHERE Name LIKE '{impressora.Replace("'", "''")},%'";
+            for (int tentativa = 0; tentativa < 8; tentativa++)   // ~4s (8 x 500ms)
+            {
+                System.Threading.Thread.Sleep(500);
+                bool temJob = false;
+                using var jobs = new System.Management.ManagementObjectSearcher(filtro);
+                foreach (var j in jobs.Get())
+                {
+                    temJob = true;
+                    var s = j["JobStatus"]?.ToString() ?? "";
+                    if (s.Contains("Error", StringComparison.OrdinalIgnoreCase) ||
+                        s.Contains("Offline", StringComparison.OrdinalIgnoreCase) ||
+                        s.Contains("Retained", StringComparison.OrdinalIgnoreCase) ||
+                        s.Contains("Blocked", StringComparison.OrdinalIgnoreCase) ||
+                        s.Contains("PaperOut", StringComparison.OrdinalIgnoreCase))
+                        return (false, "o cupom travou na fila — impressora desligada, sem papel ou desconectada.");
+                }
+                if (!temJob) return (true, "");   // fila drenou: saiu papel.
+            }
+            // ainda ha job pendente (sem erro claro) apos 4s: pode estar lenta.
+            return (false, "o cupom ainda esta na fila (impressora nao respondeu). Verifique cabo/energia e papel.");
+        }
+        catch { return (true, ""); }   // WMI indisponivel: nao da pra confirmar, assume enviado.
     }
 
     /// <summary>

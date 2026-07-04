@@ -3,6 +3,53 @@
 Formato baseado em [Keep a Changelog](https://keepachangelog.com/pt-BR/).
 Versionamento [SemVer](https://semver.org/lang/pt-BR/).
 
+## [2.4.1] — Central de Impressora, modos de vale e blindagem de impressão
+
+### Adicionado
+- **Novo modo de cupom "Só Vales destacáveis"**: imprime apenas as fichas (sem o recibo
+  gerencial antes), com um **mini-cabeçalho da festa em cada ficha** (nome do evento + nº da
+  venda + data) para a ficha se identificar sozinha na barraca. Economiza papel.
+- **Coluna "Impressões"** no Histórico de Vendas: mostra quantas vezes cada nota foi impressa
+  (1ª via + reimpressões). Reimpressas (2x+) aparecem em destaque; nunca impressas em cinza.
+
+### Alterado
+- **Ficha de Consumo** agora sai **1 ficha por unidade** (não agrupa "3X"): cada unidade é uma
+  ficha destacável, entregável em barracas diferentes. Cabeçalho melhorado (nome da festa,
+  subtítulo/nº da venda e data) — a ficha deixa de ser só o item solto no topo.
+- **Impressão blindada contra travar o caixa**: teto de tempo de 15s (impressora que não
+  responde não congela a venda — a nota é salva e pode ser reimpressa), e limpeza automática
+  de job agarrado no spooler (reinicia o serviço se um cupom trava a fila).
+
+### Corrigido / Segurança
+- **Venda cancelada (estornada) não pode mais ser reimpressa** — evita entregar ficha de uma
+  venda devolvida (bloqueio no serviço e na tela de Histórico).
+
+## [2.4.1-central] — Central de Impressora + status honesto
+
+### Adicionado
+- **Central de Impressora** (F12) reformulada, nível profissional:
+  - **Semáforo de status ao vivo** (verde PRONTA / amarelo ATENÇÃO / vermelho PARADA) com
+    dica de ação, auto-atualizado a cada 3s.
+  - **Detalhes técnicos**: tipo (USB/Bluetooth/serial), porta (USB001/COMx), driver e se é
+    padrão do PDV **e** do Windows.
+  - **Fila de impressão** na tela: lista os cupons pendentes (jobs em erro em vermelho) e
+    botão **Limpar fila** para destravar cupom preso sem sair do app.
+  - **Ações rápidas**: Detectar automaticamente, Salvar como impressora do PDV, Imprimir
+    teste (confirma a saída), Definir como padrão do Windows.
+
+### Corrigido
+- **"Detectar automaticamente" mentia "PRONTA (online)"** com a impressora desligada / sem
+  cabo. Causa: o Windows só marca `WorkOffline` quando o usuário liga "usar offline"
+  manualmente — desconexão física de térmica USB barata (MPT/POS) **não** é reportada; o SO
+  só descobre ao mandar o job. Agora o status lê também `PrinterStatus`/`DetectedErrorState`
+  e jobs travados, e a tela é **honesta**: "Instalada — o status real só é confirmado ao
+  imprimir" (em vez de afirmar PRONTA), detectando também SEM PAPEL, TAMPA ABERTA e o último
+  cupom travado (sinal de aparelho desligado).
+- **"Imprimir Teste" dava "enviado!" mesmo com erro**: dizia sucesso só porque o Windows
+  aceitou o job na fila. Agora o teste **confirma a saída**: aguarda a fila drenar e, se o
+  job travar (Error/Offline/PaperOut), mostra "Falhou: … impressora desligada, sem papel ou
+  desconectada." — só fica verde ("OK — saiu papel!") se realmente imprimiu.
+
 ## [2.4.0] — Gestão avançada, permissões e QA em sandbox
 
 ### Adicionado

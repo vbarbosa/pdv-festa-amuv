@@ -9,6 +9,23 @@ public enum TipoPromocao
     Combo = 1
 }
 
+/// <summary>
+/// Dias da semana em que a promocao vale (flags combinaveis). Nenhum/Todos = vale todo dia.
+/// </summary>
+[Flags]
+public enum DiasSemana
+{
+    Nenhum  = 0,
+    Domingo = 1 << 0,
+    Segunda = 1 << 1,
+    Terca   = 1 << 2,
+    Quarta  = 1 << 3,
+    Quinta  = 1 << 4,
+    Sexta   = 1 << 5,
+    Sabado  = 1 << 6,
+    Todos   = Domingo | Segunda | Terca | Quarta | Quinta | Sexta | Sabado
+}
+
 /// <summary>Item exigido por uma promocao (produto + quantidade minima no carrinho).</summary>
 public sealed class PromocaoItem
 {
@@ -28,21 +45,64 @@ public sealed class Promocao
     public TipoPromocao Tipo { get; set; }
     /// <summary>Desconto em CENTAVOS por conjunto completo.</summary>
     public int ValorDescontoCentavos { get; set; }
-    /// <summary>Janela de validade (null/null = sempre valida enquanto Ativa).</summary>
+    /// <summary>Janela de HORARIO (null/null = qualquer hora enquanto Ativa).</summary>
     public TimeSpan? HoraInicio { get; set; }
     public TimeSpan? HoraFim { get; set; }
+    /// <summary>Intervalo de DATAS (null = sem limite daquele lado). Data unica: Inicio==Fim.</summary>
+    public DateTime? DataInicio { get; set; }
+    public DateTime? DataFim { get; set; }
+    /// <summary>Dias da semana em que vale. Nenhum/Todos = todos os dias.</summary>
+    public DiasSemana Dias { get; set; } = DiasSemana.Todos;
     public bool Ativo { get; set; } = true;
     public List<PromocaoItem> Itens { get; set; } = new();
 
-    /// <summary>Valida se a promocao pode ser aplicada no instante dado (Ativa + no horario).</summary>
+    /// <summary>
+    /// Valida se a promocao pode ser aplicada no instante dado. Combina 4 filtros (todos
+    /// devem passar): Ativa + dentro do INTERVALO DE DATAS + no DIA DA SEMANA + na HORA.
+    /// Cada filtro so restringe se estiver configurado (null/Todos = nao restringe).
+    /// </summary>
     public bool ValidaAgora(DateTime agora)
     {
         if (!Ativo) return false;
-        if (HoraInicio is null && HoraFim is null) return true;   // sem restricao de horario
+        if (!DentroDoIntervaloDeDatas(agora)) return false;
+        if (!NoDiaDaSemana(agora)) return false;
+        return NoHorario(agora);
+    }
+
+    /// <summary>A data de 'agora' esta no intervalo [DataInicio, DataFim]? (compara so a DATA).</summary>
+    private bool DentroDoIntervaloDeDatas(DateTime agora)
+    {
+        var hoje = agora.Date;
+        if (DataInicio is DateTime ini && hoje < ini.Date) return false;
+        if (DataFim is DateTime fim && hoje > fim.Date) return false;
+        return true;
+    }
+
+    /// <summary>O dia da semana de 'agora' esta habilitado? (Nenhum/Todos = qualquer dia).</summary>
+    private bool NoDiaDaSemana(DateTime agora)
+    {
+        if (Dias == DiasSemana.Nenhum || Dias == DiasSemana.Todos) return true;
+        var bit = agora.DayOfWeek switch
+        {
+            DayOfWeek.Sunday => DiasSemana.Domingo,
+            DayOfWeek.Monday => DiasSemana.Segunda,
+            DayOfWeek.Tuesday => DiasSemana.Terca,
+            DayOfWeek.Wednesday => DiasSemana.Quarta,
+            DayOfWeek.Thursday => DiasSemana.Quinta,
+            DayOfWeek.Friday => DiasSemana.Sexta,
+            _ => DiasSemana.Sabado
+        };
+        return (Dias & bit) != 0;
+    }
+
+    /// <summary>A hora de 'agora' esta na janela [HoraInicio, HoraFim]? (null/null = qualquer hora).</summary>
+    private bool NoHorario(DateTime agora)
+    {
+        if (HoraInicio is null && HoraFim is null) return true;
         var t = agora.TimeOfDay;
-        var ini = HoraInicio ?? TimeSpan.Zero;                    // so "ate X" -> vale desde 00:00
-        var fim = HoraFim ?? new TimeSpan(23, 59, 59);            // so "a partir de X"
-        // janela normal (ex: 08:00-20:00) ou que cruza a meia-noite (ex: 22:00-02:00)
+        var ini = HoraInicio ?? TimeSpan.Zero;
+        var fim = HoraFim ?? new TimeSpan(23, 59, 59);
+        // janela normal (08:00-20:00) ou que cruza a meia-noite (22:00-02:00)
         return ini <= fim ? t >= ini && t <= fim : t >= ini || t <= fim;
     }
 }
