@@ -280,11 +280,12 @@ public sealed class Servico : IDisposable
     private bool ModoDemo => ImpressaoSimulada || Environment.GetEnvironmentVariable("PDV_DEMO") == "1";
 
     /// <summary>
-    /// Imprime (ou reimprime) o cupom de uma venda usando o layout configurado.
+    /// Imprime (ou reimprime) o cupom de uma venda. Se <paramref name="modo"/> for informado,
+    /// usa ESSE modo de cupom (o operador escolheu na reimpressao); senao usa a config global.
     /// SEGURANCA: nao imprime venda CANCELADA (estornada). Ao imprimir com sucesso, registra
     /// a impressao (contador de vias) para o Historico mostrar quantas vezes a nota saiu.
     /// </summary>
-    public (bool ok, string msg) ImprimirVenda(Venda venda)
+    public (bool ok, string msg) ImprimirVenda(Venda venda, ModoCupom? modo = null)
     {
         if (venda.Cancelada)
             return (false, "Venda CANCELADA (estornada) nao pode ser reimpressa.");
@@ -292,7 +293,9 @@ public sealed class Servico : IDisposable
         var impressora = ImpressoraPadrao;
         if (string.IsNullOrWhiteSpace(impressora))
             return (false, "Nenhuma impressora configurada (F12).");
-        var (ok, msg) = EscPosPrinter.ImprimirTicket(impressora, venda, LerConfigCupom());
+        var cfg = LerConfigCupom();
+        if (modo is ModoCupom m) cfg.Modo = m;   // reimpressao com tipo escolhido pelo operador
+        var (ok, msg) = EscPosPrinter.ImprimirTicket(impressora, venda, cfg);
         if (ok) venda.Impressoes = Repo.RegistrarImpressao(venda.Id);   // conta 1a via + reimpressoes
         return (ok, msg);
     }

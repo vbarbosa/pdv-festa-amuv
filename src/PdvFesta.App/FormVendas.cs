@@ -188,7 +188,7 @@ public sealed class FormVendas : Form
     private StatusStrip CriarStatusStrip()
     {
         var st = new StatusStrip { SizingGrip = false, Font = new Font("Segoe UI", 10F) };
-        var atalhos = new ToolStripStatusLabel("[Letra]+[Nº]+[Enter] Adiciona   |   [Del] Remove item   |   [F2] Pagar   [Esc] Cancela venda   [F9] Fechamento   [F12] Impressora")
+        var atalhos = new ToolStripStatusLabel("[Letra]+[Nº]+[Enter] Adiciona   |   [Del] Remove item   |   [F2] Pagar   |   [Esc] Cancela venda   |   [F9] Fechamento   |   [F12] Impressora")
         { Spring = true, TextAlign = ContentAlignment.MiddleLeft };
 
         _stBd.Text = "BD: --";
@@ -482,7 +482,10 @@ public sealed class FormVendas : Form
         // limpa qualquer destaque anterior em todas as abas
         foreach (var aba in _abaPorCategoria.Values)
             foreach (var btn in ProdutosDaAba(aba))
+            {
                 btn.FlatAppearance.BorderColor = Color.FromArgb(210, 210, 210);
+                btn.FlatAppearance.BorderSize = 1;
+            }
 
         if (_catSelecionada is null)
         {
@@ -498,6 +501,7 @@ public sealed class FormVendas : Form
             {
                 var alvo = botoes[_itemDestacado];
                 alvo.FlatAppearance.BorderColor = Marca.Vermelho;
+                alvo.FlatAppearance.BorderSize = 4;   // destaque de teclado bem grosso
                 var nome = _itensPorCategoria[_catSelecionada][_itemDestacado].Nome;
                 _stModo.Text = $"► {_catSelecionada} ({letra}) {_itemDestacado + 1}: {nome} — Enter adiciona";
                 return;
@@ -526,7 +530,23 @@ public sealed class FormVendas : Form
             Name = prefixoNome + p.Id        // AutomationId (btnProduto_ nas abas; btnProdutoTodos_ na aba Todos)
         };
         btn.FlatAppearance.BorderColor = Color.FromArgb(210, 210, 210);
+        btn.FlatAppearance.BorderSize = 1;
         btn.Click += (s, e) => AdicionarProduto(p);
+
+        // HOVER do mouse: borda GROSSA e colorida, para o operador enxergar bem onde esta.
+        // (nao mexe no item destacado por teclado, que tem seu proprio realce mais forte.)
+        btn.MouseEnter += (s, e) =>
+        {
+            if (btn.FlatAppearance.BorderColor == Marca.Vermelho) return;   // ja destacado por teclado
+            btn.FlatAppearance.BorderColor = Color.FromArgb(0, 120, 215);   // azul de foco
+            btn.FlatAppearance.BorderSize = 4;                              // grossinho
+        };
+        btn.MouseLeave += (s, e) =>
+        {
+            if (btn.FlatAppearance.BorderColor == Marca.Vermelho) return;   // preserva o destaque de teclado
+            btn.FlatAppearance.BorderColor = Color.FromArgb(210, 210, 210);
+            btn.FlatAppearance.BorderSize = 1;
+        };
 
         // badge com o NUMERO do item dentro da sua categoria (1..N). TODO item ganha um,
         // entao a sequencia "Letra da categoria + Numero" opera qualquer produto pelo teclado.
