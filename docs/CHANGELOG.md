@@ -3,6 +3,24 @@
 Formato baseado em [Keep a Changelog](https://keepachangelog.com/pt-BR/).
 Versionamento [SemVer](https://semver.org/lang/pt-BR/).
 
+## [2.5.1] — Exportação robusta e configurável
+
+### Adicionado
+- **Exportação configurável** no Relatório Gerencial e no export do turno: o operador escolhe
+  o **formato** (CSV único · vários CSV · Excel `.xlsx` · **Excel com abas**), **como listar os
+  itens** (1 linha por item — explode, fácil de analisar — ou amontoado na venda) e **quais
+  seções** incluir (Resumo · Vendas · Itens vendidos · Preços praticados).
+- **Excel `.xlsx` nativo** (gerado sem dependência externa, OpenXML mínimo) — abre no Excel com
+  uma aba por seção. Nome do arquivo com as datas do período → nunca sobrescreve.
+
+### Alterado
+- O export do turno (menu Arquivo/Histórico) passou a usar o **mesmo fluxo robusto** do
+  Relatório Gerencial (antes gerava só 2 CSVs fixos).
+
+### Testes
+- **301 testes** (subindo de 292): montagem das tabelas, modos de item, seções e os 4 formatos
+  de arquivo (incl. validação da estrutura do `.xlsx`).
+
 ## [2.5.0] — Módulo Gerencial (time travel), Cortesia e gestão de turnos
 
 ### Adicionado
