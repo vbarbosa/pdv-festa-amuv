@@ -59,7 +59,8 @@ CREATE TABLE IF NOT EXISTS vendas (
     operador      TEXT NOT NULL DEFAULT '',
     caixa_id      INTEGER NULL,
     status        INTEGER NOT NULL DEFAULT 0,
-    impressoes    INTEGER NOT NULL DEFAULT 0
+    impressoes    INTEGER NOT NULL DEFAULT 0,
+    observacao    TEXT NOT NULL DEFAULT ''
 );
 
 CREATE TABLE IF NOT EXISTS caixa (
@@ -178,6 +179,7 @@ CREATE INDEX IF NOT EXISTS ix_promoitens ON promocao_itens(promocao_id);";
         if (!colunas.Contains("caixa_id"))   AddColuna("ALTER TABLE vendas ADD COLUMN caixa_id INTEGER NULL;");
         if (!colunas.Contains("status"))     AddColuna("ALTER TABLE vendas ADD COLUMN status INTEGER NOT NULL DEFAULT 0;");
         if (!colunas.Contains("impressoes")) AddColuna("ALTER TABLE vendas ADD COLUMN impressoes INTEGER NOT NULL DEFAULT 0;");
+        if (!colunas.Contains("observacao")) AddColuna("ALTER TABLE vendas ADD COLUMN observacao TEXT NOT NULL DEFAULT '';");
 
         // Agora as colunas existem com certeza: cria o indice.
         using var idx = conn.CreateCommand();
@@ -231,8 +233,8 @@ ON CONFLICT(chave) DO UPDATE SET valor = excluded.valor;";
         {
             cmd.Transaction = tx;
             cmd.CommandText = @"
-INSERT INTO vendas (data_hora, total_cent, forma, recebido_cent, troco_cent, operador, caixa_id, status)
-VALUES ($dh, $total, $forma, $rec, $troco, $op, $caixa, $status);
+INSERT INTO vendas (data_hora, total_cent, forma, recebido_cent, troco_cent, operador, caixa_id, status, observacao)
+VALUES ($dh, $total, $forma, $rec, $troco, $op, $caixa, $status, $obs);
 SELECT last_insert_rowid();";
             cmd.Parameters.AddWithValue("$dh", venda.DataHora.ToString("o"));
             cmd.Parameters.AddWithValue("$total", venda.TotalCentavos);
@@ -242,6 +244,7 @@ SELECT last_insert_rowid();";
             cmd.Parameters.AddWithValue("$op", venda.Operador);
             cmd.Parameters.AddWithValue("$caixa", (object?)venda.CaixaId ?? DBNull.Value);
             cmd.Parameters.AddWithValue("$status", (int)venda.Status);
+            cmd.Parameters.AddWithValue("$obs", venda.Observacao ?? "");
             vendaId = (long)(cmd.ExecuteScalar() ?? 0L);
         }
 
@@ -265,14 +268,31 @@ VALUES ($vid, $pid, $nome, $preco, $qtd);";
         return vendaId;
     }
 
-    public List<Venda> ListarVendas()
+    public List<Venda> ListarVendas() => ListarVendasPorPeriodo(null, null);
+
+    /// <summary>
+    /// Vendas dentro de um intervalo de datas [inicio, fim] (inclusivo), consultando o
+    /// carimbo de tempo (data_hora, ISO-8601) direto no SQLite — DESACOPLADO do caixa aberto.
+    /// null em qualquer lado = sem limite daquele lado. Base do modulo gerencial (time travel).
+    /// As datas ISO-8601 ordenam lexicograficamente, entao a comparacao de string funciona.
+    /// </summary>
+    public List<Venda> ListarVendasPorPeriodo(DateTime? inicio, DateTime? fim)
     {
         using var conn = Abrir();
         var vendas = new Dictionary<long, Venda>();
 
         using (var cmd = conn.CreateCommand())
         {
-            cmd.CommandText = "SELECT id, data_hora, total_cent, forma, recebido_cent, troco_cent, operador, caixa_id, status, impressoes FROM vendas ORDER BY id;";
+            var where = new List<string>();
+            if (inicio is not null) where.Add("data_hora >= $ini");
+            if (fim is not null)    where.Add("data_hora <= $fim");
+            var filtro = where.Count > 0 ? " WHERE " + string.Join(" AND ", where) : "";
+            cmd.CommandText =
+                "SELECT id, data_hora, total_cent, forma, recebido_cent, troco_cent, operador, caixa_id, status, impressoes, observacao FROM vendas"
+                + filtro + " ORDER BY id;";
+            // fim inclusivo ate o ULTIMO instante do dia (23:59:59.999...) se veio so a data
+            if (inicio is not null) cmd.Parameters.AddWithValue("$ini", inicio.Value.ToString("o"));
+            if (fim is not null)    cmd.Parameters.AddWithValue("$fim", fim.Value.ToString("o"));
             using var r = cmd.ExecuteReader();
             while (r.Read())
             {
@@ -287,7 +307,8 @@ VALUES ($vid, $pid, $nome, $preco, $qtd);";
                     Operador = r.GetString(6),
                     CaixaId = r.IsDBNull(7) ? null : r.GetInt64(7),
                     Status = (StatusVenda)r.GetInt32(8),
-                    Impressoes = r.IsDBNull(9) ? 0 : r.GetInt32(9)
+                    Impressoes = r.IsDBNull(9) ? 0 : r.GetInt32(9),
+                    Observacao = r.IsDBNull(10) ? "" : r.GetString(10)
                 };
                 vendas[v.Id] = v;
             }
@@ -425,8 +446,8 @@ VALUES ($id, $nome, $preco, $cat, $atalho, $ativo, $comp);";
             {
                 cmd.Transaction = tx;
                 cmd.CommandText = @"
-INSERT INTO vendas (id, data_hora, total_cent, forma, recebido_cent, troco_cent, operador, caixa_id, status, impressoes)
-VALUES ($id, $dh, $total, $forma, $rec, $troco, $op, $caixa, $status, $impr);";
+INSERT INTO vendas (id, data_hora, total_cent, forma, recebido_cent, troco_cent, operador, caixa_id, status, impressoes, observacao)
+VALUES ($id, $dh, $total, $forma, $rec, $troco, $op, $caixa, $status, $impr, $obs);";
                 cmd.Parameters.AddWithValue("$id", v.Id);
                 cmd.Parameters.AddWithValue("$dh", v.DataHora.ToString("o"));
                 cmd.Parameters.AddWithValue("$total", v.TotalCentavos);
@@ -437,6 +458,7 @@ VALUES ($id, $dh, $total, $forma, $rec, $troco, $op, $caixa, $status, $impr);";
                 cmd.Parameters.AddWithValue("$caixa", (object?)v.CaixaId ?? DBNull.Value);
                 cmd.Parameters.AddWithValue("$status", (int)v.Status);
                 cmd.Parameters.AddWithValue("$impr", v.Impressoes);
+                cmd.Parameters.AddWithValue("$obs", v.Observacao ?? "");
                 cmd.ExecuteNonQuery();
             }
             foreach (var item in v.Itens)
@@ -787,6 +809,61 @@ SELECT last_insert_rowid();";
         cmd.Parameters.AddWithValue("$f", DateTime.Now.ToString("o"));
         cmd.Parameters.AddWithValue("$id", caixaId);
         cmd.ExecuteNonQuery();
+    }
+
+    /// <summary>Quantas vendas (qualquer status) pertencem a um caixa. 0 = caixa "vazio" (teste).</summary>
+    public int ContarVendasDoCaixa(long caixaId)
+    {
+        using var conn = Abrir();
+        using var cmd = conn.CreateCommand();
+        cmd.CommandText = "SELECT COUNT(*) FROM vendas WHERE caixa_id = $id;";
+        cmd.Parameters.AddWithValue("$id", caixaId);
+        return Convert.ToInt32(cmd.ExecuteScalar() ?? 0);
+    }
+
+    /// <summary>
+    /// Exclui um caixa/turno DE TESTE (sem NENHUMA venda) e seus movimentos. SEGURANCA: se o
+    /// caixa tiver ao menos uma venda, NAO apaga (retorna false) — para nunca sumir com dado
+    /// financeiro real. So serve para limpar turnos abertos/fechados por engano.
+    /// </summary>
+    public bool ExcluirCaixaSeVazio(long caixaId)
+    {
+        if (ContarVendasDoCaixa(caixaId) > 0) return false;
+        return ExcluirCaixaCascata(caixaId);
+    }
+
+    /// <summary>
+    /// Exclui um caixa e TUDO que pertence a ele (vendas, itens das vendas e movimentos), numa
+    /// transacao. DESTRUTIVO — usado so para turno de TESTE com vendas, apos dupla confirmacao
+    /// na UI (senha de admin + digitar EXCLUIR). Retorna quantas vendas foram apagadas.
+    /// </summary>
+    public int ExcluirCaixaComVendas(long caixaId)
+    {
+        int n = ContarVendasDoCaixa(caixaId);
+        ExcluirCaixaCascata(caixaId);
+        return n;
+    }
+
+    /// <summary>Apaga em cascata: itens das vendas do caixa -> vendas -> movimentos -> o caixa.</summary>
+    private bool ExcluirCaixaCascata(long caixaId)
+    {
+        using var conn = Abrir();
+        using var tx = conn.BeginTransaction();
+        void Exec(string sql)
+        {
+            using var cmd = conn.CreateCommand();
+            cmd.Transaction = tx;
+            cmd.CommandText = sql;
+            cmd.Parameters.AddWithValue("$id", caixaId);
+            cmd.ExecuteNonQuery();
+        }
+        // itens das vendas do caixa (subquery), depois as vendas, movimentos e o caixa
+        Exec("DELETE FROM venda_itens WHERE venda_id IN (SELECT id FROM vendas WHERE caixa_id = $id);");
+        Exec("DELETE FROM vendas WHERE caixa_id = $id;");
+        Exec("DELETE FROM caixa_mov WHERE caixa_id = $id;");
+        Exec("DELETE FROM caixa WHERE id = $id;");
+        tx.Commit();
+        return true;
     }
 
     /// <summary>Retorna o turno ABERTO mais recente, ou null se o caixa esta fechado.</summary>

@@ -20,6 +20,7 @@ public static class CupomFormatter
         FormaPagamento.Pix => "PIX",
         FormaPagamento.CartaoDebito => "CARTAO DEBITO",
         FormaPagamento.CartaoCredito => "CARTAO CREDITO",
+        FormaPagamento.Cortesia => "CORTESIA",
         _ => "CARTAO"
     };
 

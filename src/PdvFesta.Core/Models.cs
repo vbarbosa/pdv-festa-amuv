@@ -12,7 +12,8 @@ public enum FormaPagamento
     Pix = 1,
     Cartao = 2,          // legado / cartao generico
     CartaoDebito = 3,
-    CartaoCredito = 4
+    CartaoCredito = 4,
+    Cortesia = 5         // brinde/cortesia: entrega os itens SEM cobrar (nao entra na gaveta)
 }
 
 /// <summary>
@@ -95,7 +96,12 @@ public sealed class Venda
     /// <summary>Quantas vezes o cupom desta venda ja foi impresso (1a via + reimpressoes).</summary>
     public int Impressoes { get; set; }
 
+    /// <summary>Observacao livre da venda. Em CORTESIA, guarda o NOME de quem recebeu.</summary>
+    public string Observacao { get; set; } = "";
+
     public bool Cancelada => Status == StatusVenda.Cancelada;
+    /// <summary>Cortesia (brinde): itens entregues sem cobranca. Nao entra na gaveta/faturamento.</summary>
+    public bool EhCortesia => Forma == FormaPagamento.Cortesia;
 }
 
 /// <summary>Situacao de um turno/sessao de caixa.</summary>
