@@ -18,6 +18,10 @@ public sealed class ResumoCaixa
     public int TotalCreditoCentavos { get; init; }
     public int FaturamentoBrutoCentavos { get; init; }
     public int QuantidadeVendas { get; init; }
+    /// <summary>Valor "perdido" em cortesias (brindes) — NAO entra no faturamento nem na gaveta.</summary>
+    public int TotalCortesiaCentavos { get; init; }
+    /// <summary>Quantas cortesias foram dadas no periodo.</summary>
+    public int QuantidadeCortesias { get; init; }
 }
 
 /// <summary>Quantidade e valor vendidos de UM produto (auditoria da Leitura Z / barracas).</summary>
@@ -107,6 +111,14 @@ public static class Caixa
         int cartaoGenerico = lista.Where(v => v.Forma == FormaPagamento.Cartao).Sum(v => v.TotalCentavos);
         int cartaoTotal = cartaoGenerico + debito + credito;
 
+        // CORTESIA: entra numa conta SEPARADA. Nao soma no faturamento nem na gaveta (o item foi
+        // dado de graca), mas o gestor ve quanto "custou" em brindes.
+        var cortesias = lista.Where(v => v.Forma == FormaPagamento.Cortesia).ToList();
+        int cortesia = cortesias.Sum(v => v.TotalCentavos);
+
+        // vendas PAGAS (exclui cortesia da contagem de vendas com receita).
+        int qtdPagas = lista.Count(v => v.Forma != FormaPagamento.Cortesia);
+
         return new ResumoCaixa
         {
             TotalDinheiroCentavos = dinheiro,
@@ -114,8 +126,10 @@ public static class Caixa
             TotalCartaoCentavos = cartaoTotal,
             TotalDebitoCentavos = debito,
             TotalCreditoCentavos = credito,
-            FaturamentoBrutoCentavos = dinheiro + pix + cartaoTotal,
-            QuantidadeVendas = lista.Count
+            FaturamentoBrutoCentavos = dinheiro + pix + cartaoTotal,   // cortesia NAO entra
+            QuantidadeVendas = qtdPagas,
+            TotalCortesiaCentavos = cortesia,
+            QuantidadeCortesias = cortesias.Count
         };
     }
 
@@ -162,4 +176,36 @@ public static class Caixa
             .ThenBy(i => i.Nome)
             .ToList();
     }
+
+    /// <summary>
+    /// PRECOS PRATICADOS por item: agrupa por (nome, preco unitario). Se um item foi vendido a
+    /// precos DIFERENTES no periodo (ex: Chopp mudou de R$10 para R$12 durante a festa),
+    /// aparecem linhas separadas — o contador ve claramente cada preco e quanto rendeu.
+    /// </summary>
+    public static List<PrecoPraticado> PrecosPraticados(IEnumerable<Venda> vendas)
+    {
+        return vendas
+            .Where(v => !v.Cancelada)
+            .SelectMany(v => v.Itens)
+            .Where(i => !string.IsNullOrEmpty(i.ProdutoId))   // ignora linhas de desconto
+            .GroupBy(i => (i.Nome, i.PrecoUnitarioCentavos))
+            .Select(g => new PrecoPraticado
+            {
+                Nome = g.Key.Nome,
+                PrecoUnitarioCentavos = g.Key.PrecoUnitarioCentavos,
+                Quantidade = g.Sum(i => i.Quantidade),
+                TotalCentavos = g.Sum(i => i.SubtotalCentavos)
+            })
+            .OrderBy(p => p.Nome).ThenBy(p => p.PrecoUnitarioCentavos)
+            .ToList();
+    }
+}
+
+/// <summary>Um preco praticado de um item no periodo (nome + preco unitario + quanto rendeu).</summary>
+public sealed class PrecoPraticado
+{
+    public string Nome { get; init; } = "";
+    public int PrecoUnitarioCentavos { get; init; }
+    public int Quantidade { get; init; }
+    public int TotalCentavos { get; init; }
 }

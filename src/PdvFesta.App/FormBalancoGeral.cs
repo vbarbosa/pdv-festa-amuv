@@ -83,8 +83,20 @@ public sealed class FormBalancoGeral : Form
             ForeColor = Color.FromArgb(90, 90, 90)
         };
 
+        // barra de acoes (excluir caixa de teste)
+        var barraAcoes = new FlowLayoutPanel { Dock = DockStyle.Bottom, Height = 44, Padding = new Padding(8, 4, 8, 4) };
+        var btnExcluir = new Button
+        {
+            Text = "Excluir caixa de teste (sem vendas)", Width = 300, Height = 34,
+            BackColor = Color.FromArgb(160, 0, 0), ForeColor = Color.White, FlatStyle = FlatStyle.Flat,
+            Font = new Font("Segoe UI", 9.5F, FontStyle.Bold)
+        };
+        btnExcluir.Click += (s, e) => ExcluirCaixaSelecionado();
+        barraAcoes.Controls.Add(btnExcluir);
+
         Controls.Add(_grid);
         Controls.Add(_detalhe);
+        Controls.Add(barraAcoes);
         Controls.Add(rodape);
         Controls.Add(_lblResumo);
         Controls.Add(titulo);
@@ -122,11 +134,13 @@ public sealed class FormBalancoGeral : Form
         int totCartao = _turnos.Sum(r => r.Vendas.TotalDebitoCentavos + r.Vendas.TotalCreditoCentavos);
         int totSang = _turnos.Sum(r => r.SangriasCentavos);
         int totSup = _turnos.Sum(r => r.SuprimentosCentavos);
+        int totCortesia = _turnos.Sum(r => r.Vendas.TotalCortesiaCentavos);
+        int qtdCortesia = _turnos.Sum(r => r.Vendas.QuantidadeCortesias);
 
         _lblResumo.Text =
             $"TURNOS: {nTurnos}    VENDAS: {totVendas}    FATURAMENTO TOTAL: {M(totFat)}\n" +
             $"Dinheiro {M(totDin)}   |   Pix {M(totPix)}   |   Cartao {M(totCartao)}\n" +
-            $"Suprimentos {M(totSup)}   |   Sangrias {M(totSang)}";
+            $"Suprimentos {M(totSup)}   |   Sangrias {M(totSang)}   |   Cortesias {qtdCortesia} ({M(totCortesia)})";
 
         if (_grid.Rows.Count > 0) { _grid.Rows[0].Selected = true; MostrarDetalhe(); }
         else _detalhe.Text = "Nenhum caixa registrado ainda.";
@@ -165,5 +179,75 @@ public sealed class FormBalancoGeral : Form
                 sb.AppendLine($"  {(m.Tipo == TipoMovimento.Sangria ? "SANGRIA " : "SUPRIM. ")} {M(m.ValorCentavos),12}   {m.Motivo}");
         }
         _detalhe.Text = sb.ToString();
+    }
+
+    /// <summary>
+    /// Exclui o caixa selecionado. SEM vendas: confirmacao simples. COM vendas (turno de teste
+    /// que voce nao quer manter): trava FORTE — senha de admin + digitar EXCLUIR + mostra o que
+    /// vai apagar. Nunca o caixa aberto.
+    /// </summary>
+    private void ExcluirCaixaSelecionado()
+    {
+        if (_grid.CurrentRow is null || _grid.CurrentRow.Index < 0 || _grid.CurrentRow.Index >= _turnos.Count)
+        { MessageBox.Show("Selecione um caixa na lista.", Text, MessageBoxButtons.OK, MessageBoxIcon.Information); return; }
+
+        var resumo = _turnos[_grid.CurrentRow.Index];
+        var t = resumo.Turno;
+        int nVendas = _servico.VendasNoCaixa(t.Id);
+
+        // ---- caixa VAZIO: confirmacao simples ----
+        if (nVendas == 0)
+        {
+            var r = MessageBox.Show(
+                $"Excluir o Caixa #{t.Id} (operador {t.Operador}, sem vendas)?\nIsso limpa o histórico de testes.",
+                "Excluir caixa de teste", MessageBoxButtons.YesNo, MessageBoxIcon.Warning);
+            if (r != DialogResult.Yes) return;
+            if (_servico.ExcluirCaixaDeTeste(t.Id)) { Carregar(); MessageBox.Show("Caixa de teste excluído.", Text, MessageBoxButtons.OK, MessageBoxIcon.Information); }
+            else MessageBox.Show("Não foi possível excluir (caixa aberto?).", Text, MessageBoxButtons.OK, MessageBoxIcon.Warning);
+            return;
+        }
+
+        // ---- caixa COM vendas: EXCLUSAO FORTE (teste que nao quer manter) ----
+        // 1) senha de admin
+        if (!Dialogos.LiberarAdmin(this, _servico)) return;
+
+        // 2) mostra o que vai apagar e pede a palavra EXCLUIR
+        var fatur = M(resumo.Vendas.FaturamentoBrutoCentavos);
+        var aviso =
+            $"ATENÇÃO — EXCLUSÃO DEFINITIVA (só para turno de TESTE):\n\n" +
+            $"Caixa #{t.Id}  —  {t.Operador}\n" +
+            $"{nVendas} venda(s), faturamento {fatur}.\n\n" +
+            $"Isso APAGA o turno E todas as suas vendas do banco (não dá pra desfazer).\n" +
+            $"Se este turno tem vendas REAIS, NÃO exclua.\n\n" +
+            $"Para confirmar, digite a palavra EXCLUIR abaixo:";
+        var digitado = PromptTexto("Excluir turno com vendas", aviso);
+        if (!string.Equals(digitado?.Trim(), "EXCLUIR", StringComparison.Ordinal))
+        {
+            if (digitado is not null)   // null = cancelou; senao errou a palavra
+                MessageBox.Show("Palavra incorreta. Nada foi excluído.", Text, MessageBoxButtons.OK, MessageBoxIcon.Information);
+            return;
+        }
+
+        int apagadas = _servico.ExcluirCaixaComVendas(t.Id);
+        if (apagadas >= 0)
+        {
+            Carregar();
+            MessageBox.Show($"Caixa #{t.Id} excluído ({apagadas} venda(s) apagadas).", Text, MessageBoxButtons.OK, MessageBoxIcon.Information);
+        }
+        else
+            MessageBox.Show("Não foi possível excluir (é o caixa aberto agora?).", Text, MessageBoxButtons.OK, MessageBoxIcon.Warning);
+    }
+
+    /// <summary>Mini-dialogo de entrada de texto (para digitar a palavra de confirmacao).</summary>
+    private string? PromptTexto(string titulo, string mensagem)
+    {
+        using var dlg = new Form { Text = titulo, StartPosition = FormStartPosition.CenterParent, FormBorderStyle = FormBorderStyle.FixedDialog, MaximizeBox = false, MinimizeBox = false, ClientSize = new Size(460, 260), Icon = Marca.Icone() };
+        var lbl = new Label { Text = mensagem, Dock = DockStyle.Top, Height = 180, Padding = new Padding(12, 10, 12, 4) };
+        var txt = new TextBox { Dock = DockStyle.Top, Font = new Font("Segoe UI", 14F, FontStyle.Bold), Margin = new Padding(12) };
+        var ok = new Button { Text = "Confirmar", Dock = DockStyle.Bottom, Height = 40, DialogResult = DialogResult.OK, BackColor = Color.FromArgb(160, 0, 0), ForeColor = Color.White, FlatStyle = FlatStyle.Flat };
+        dlg.Controls.Add(txt); dlg.Controls.Add(lbl); dlg.Controls.Add(ok);
+        dlg.AcceptButton = ok;
+        txt.Select();
+        return dlg.ShowDialog(this) == DialogResult.OK ? txt.Text : null;
     }
 }

@@ -117,6 +117,12 @@ public sealed class FormDashboard : Form
         _lblCanceladas.Text = canceladas.ToString();
         if (canceladas > 0) _lblCanceladas.ForeColor = Color.FromArgb(200, 0, 0);
 
+        // cortesias (brindes) do turno — valor "dado de graca", fora do faturamento.
+        if (v.QuantidadeCortesias > 0)
+            Text = $"Painel em Tempo Real  —  Cortesias: {v.QuantidadeCortesias} ({Dinheiro.Formatar(v.TotalCortesiaCentavos)})";
+        else
+            Text = "Painel em Tempo Real";
+
         _grafPagamentos.Definir(new (string, long, Color)[]
         {
             ("Dinheiro", v.TotalDinheiroCentavos, Color.FromArgb(0, 150, 0)),
