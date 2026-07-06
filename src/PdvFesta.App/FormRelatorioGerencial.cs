@@ -63,7 +63,7 @@ public sealed class FormRelatorioGerencial : Form
         barra.Controls.Add(BotaoRapido("Tudo", AtalhoTudo));
         var btnFiltrar = BotaoRapido("FILTRAR (F5)", Filtrar); btnFiltrar.BackColor = Color.FromArgb(0, 120, 200); btnFiltrar.ForeColor = Color.White; btnFiltrar.Width = 130;
         barra.Controls.Add(btnFiltrar);
-        var btnCsv = BotaoRapido("Exportar CSV", ExportarCsv); btnCsv.BackColor = Color.FromArgb(0, 120, 60); btnCsv.ForeColor = Color.White; btnCsv.Width = 130;
+        var btnCsv = BotaoRapido("Exportar", ExportarCsv); btnCsv.BackColor = Color.FromArgb(0, 120, 60); btnCsv.ForeColor = Color.White; btnCsv.Width = 130;
         barra.Controls.Add(btnCsv);
         var btnPrecos = BotaoRapido("Preços praticados", MostrarPrecosPraticados); btnPrecos.BackColor = Color.FromArgb(120, 90, 30); btnPrecos.ForeColor = Color.White; btnPrecos.Width = 150;
         barra.Controls.Add(btnPrecos);
@@ -207,28 +207,11 @@ public sealed class FormRelatorioGerencial : Form
 
     private void ExportarCsv()
     {
-        // exige a mesma permissao do CSV do turno (dado financeiro saindo)
-        if (!Dialogos.LiberarAcao(this, _servico, AcaoProtegida.ExportarCsv)) return;
-
+        // export ROBUSTO e configuravel (CSV/XLSX/abas, itens por linha, secoes), do PERIODO
+        // filtrado. Nome do arquivo com as datas -> nunca sobrescreve.
         var (ini, fim) = Periodo();
-        using var dlg = new FolderBrowserDialog { Description = "Pasta para salvar o CSV do período" };
-        var desktop = Environment.GetFolderPath(Environment.SpecialFolder.DesktopDirectory);
-        if (Directory.Exists(desktop)) dlg.SelectedPath = desktop;
-        if (dlg.ShowDialog(this) != DialogResult.OK) return;
-
-        try
-        {
-            // nome dinamico com as datas -> nunca sobrescreve
-            var nome = $"Vendas_FestaJunina_{ini:dd-MM-yyyy}_ate_{fim:dd-MM-yyyy}.csv";
-            var caminho = Path.Combine(dlg.SelectedPath, nome);
-            var utf8Bom = new System.Text.UTF8Encoding(true);
-            File.WriteAllText(caminho, ExportadorCsv.Vendas(_vendas), utf8Bom);
-            MessageBox.Show($"CSV exportado ({_vendas.Count} vendas do período):\n{caminho}",
-                "Exportar CSV", MessageBoxButtons.OK, MessageBoxIcon.Information);
-        }
-        catch (Exception ex)
-        {
-            MessageBox.Show("Erro ao exportar: " + ex.Message, "Exportar CSV", MessageBoxButtons.OK, MessageBoxIcon.Warning);
-        }
+        var descr = $"{ini:dd/MM/yyyy} a {fim:dd/MM/yyyy}";
+        var prefixo = $"Vendas_FestaJunina_{ini:dd-MM-yyyy}_ate_{fim:dd-MM-yyyy}";
+        Dialogos.ExportarComDialogo(this, _servico, _vendas, descr, prefixo);
     }
 }

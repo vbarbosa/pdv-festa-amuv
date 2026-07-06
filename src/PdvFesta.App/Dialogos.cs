@@ -56,35 +56,66 @@ public static class Dialogos
     }
 
     /// <summary>
-    /// Fluxo compartilhado de "Exportar CSV do turno": pergunta a pasta, gera os 2 arquivos
-    /// (resumo + vendas) e avisa. Usado pelo Historico (F3) e pelo menu Arquivo, a qualquer
-    /// momento (nao precisa fechar o caixa). Nao exige turno aberto — exporta o que houver.
+    /// Fluxo ROBUSTO e unificado de exportacao: pergunta as OPCOES (formato CSV/XLSX/abas, como
+    /// listar itens, quais secoes), escolhe o destino e grava. Usado pelo Relatorio Gerencial e
+    /// pelo export do turno (menu Arquivo/Historico). 'vendas' e 'periodoDescr' definem o conteudo.
+    /// 'prefixo' compoe o nome do arquivo (com as datas -> nunca sobrescreve).
     /// </summary>
-    public static void ExportarCsvComDialogo(IWin32Window owner, Servico servico)
+    public static void ExportarComDialogo(IWin32Window owner, Servico servico,
+        IReadOnlyList<PdvFesta.Core.Venda> vendas, string periodoDescr, string prefixo)
     {
         // trava configuravel: exportar dados financeiros pode exigir senha de admin.
         if (!LiberarAcao(owner, servico, AcaoProtegida.ExportarCsv)) return;
 
-        using var dlg = new FolderBrowserDialog { Description = "Escolha a pasta para salvar os CSVs do turno" };
-        var desktop = Environment.GetFolderPath(Environment.SpecialFolder.DesktopDirectory);
-        if (Directory.Exists(desktop)) dlg.SelectedPath = desktop;
-        if (dlg.ShowDialog(owner) != DialogResult.OK) return;
+        // 1) opcoes
+        using var opt = new DialogoExport();
+        opt.ShowDialog(owner);
+        if (!opt.Confirmado) return;
 
+        // 2) destino (pasta para varios CSV; arquivo para os demais)
+        string destino;
+        var desktop = Environment.GetFolderPath(Environment.SpecialFolder.DesktopDirectory);
+        if (opt.ExigePasta)
+        {
+            using var fbd = new FolderBrowserDialog { Description = "Pasta para os arquivos CSV" };
+            if (Directory.Exists(desktop)) fbd.SelectedPath = desktop;
+            if (fbd.ShowDialog(owner) != DialogResult.OK) return;
+            destino = fbd.SelectedPath;
+        }
+        else
+        {
+            using var sfd = new SaveFileDialog
+            {
+                InitialDirectory = Directory.Exists(desktop) ? desktop : "",
+                FileName = $"{prefixo}.{opt.Extensao}",
+                Filter = opt.Extensao == "csv" ? "CSV (*.csv)|*.csv" : "Excel (*.xlsx)|*.xlsx"
+            };
+            if (sfd.ShowDialog(owner) != DialogResult.OK) return;
+            destino = sfd.FileName;
+        }
+
+        // 3) monta as tabelas e grava
         try
         {
-            var prefixo = $"festa-{DateTime.Now:yyyyMMdd-HHmm}";
-            var (resumo, vendas) = servico.ExportarCsvTurno(dlg.SelectedPath, prefixo);
+            var tabelas = PdvFesta.Core.RelatorioBuilder.Montar(vendas, periodoDescr, opt.ModoItens, opt.Secoes);
+            var gerados = PdvFesta.Core.ExportadorArquivos.Gravar(tabelas, opt.Formato, destino, prefixo);
             MessageBox.Show(
-                "CSVs exportados:\n\n" +
-                $"- Resumo: {Path.GetFileName(resumo)}\n" +
-                $"- Vendas: {Path.GetFileName(vendas)}\n\n" +
-                $"Pasta: {dlg.SelectedPath}",
-                "Exportar CSV", MessageBoxButtons.OK, MessageBoxIcon.Information);
+                $"Exportado ({vendas.Count} vendas):\n\n" + string.Join("\n", gerados.Select(g => "• " + Path.GetFileName(g))) +
+                $"\n\nEm: {Path.GetDirectoryName(gerados[0])}",
+                "Exportar", MessageBoxButtons.OK, MessageBoxIcon.Information);
         }
         catch (Exception ex)
         {
-            MessageBox.Show("Erro ao exportar CSV: " + ex.Message, "Exportar CSV",
-                MessageBoxButtons.OK, MessageBoxIcon.Warning);
+            MessageBox.Show("Erro ao exportar: " + ex.Message, "Exportar", MessageBoxButtons.OK, MessageBoxIcon.Warning);
         }
+    }
+
+    /// <summary>Export do TURNO ATUAL (menu Arquivo/Historico) — usa o fluxo robusto unificado.</summary>
+    public static void ExportarCsvComDialogo(IWin32Window owner, Servico servico)
+    {
+        var vendas = servico.VendasDoTurno();
+        var descr = servico.TurnoAtual is { } t ? $"Turno #{t.Id} — {t.Abertura:dd/MM/yyyy}" : "Turno atual";
+        var prefixo = $"festa-turno-{DateTime.Now:yyyyMMdd-HHmm}";
+        ExportarComDialogo(owner, servico, vendas, descr, prefixo);
     }
 }
