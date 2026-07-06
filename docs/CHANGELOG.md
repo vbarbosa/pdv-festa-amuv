@@ -3,6 +3,35 @@
 Formato baseado em [Keep a Changelog](https://keepachangelog.com/pt-BR/).
 Versionamento [SemVer](https://semver.org/lang/pt-BR/).
 
+## [2.5.0] — Módulo Gerencial (time travel), Cortesia e gestão de turnos
+
+### Adicionado
+- **Cortesia (brinde)**: nova forma de pagamento para entregar itens sem cobrar (ex: cantor,
+  autoridade). Registra o **nome de quem recebeu**, **não entra na gaveta nem no faturamento**
+  e fica rastreável (painel, balanço e CSV). Atalho `[O]` na tela de pagamento.
+- **Relatório Gerencial por período (Ctrl+R)**: analisa as vendas de **qualquer data** direto
+  do banco, **mesmo com o caixa fechado** ("time travel"). Filtro De/Até + atalhos Hoje /
+  Ontem / 7 dias / Tudo, gráficos, grade e resumo. Resolve o acoplamento à "sessão atual".
+- **CSV do período** com nome dinâmico: `Vendas_FestaJunina_04-07-2026_ate_05-07-2026.csv`.
+- **Preços praticados**: relatório que agrupa por item + preço unitário. Item que mudou de
+  preço durante o evento aparece marcado `*** PREÇO MUDOU ***` (auditoria para o contador).
+- **Combo vira botão**: ao cadastrar uma promoção do tipo Combo, o sistema cria também o
+  produto-combo na aba Promoções (preço = itens − desconto).
+- **Excluir turno** no Balanço Geral: turno de teste **sem vendas** (confirmação simples) ou
+  **com vendas** (trava forte: senha de admin + digitar `EXCLUIR` + mostra o que apaga).
+
+### Alterado
+- Camada de consultas **desacoplada do caixa aberto**: `ListarVendasPorPeriodo(início, fim)`
+  com query SQL parametrizada por `data_hora` — base de todo o módulo gerencial.
+
+### Migração
+- `vendas.observacao` adicionada via `ALTER TABLE` (bancos antigos preservados; guarda o nome
+  do beneficiário nas cortesias).
+
+### Testes
+- **292 testes unitários** (subindo de 280): cortesia (fora da gaveta, rastreável), consultas
+  por período (time travel), preços praticados (mudança de preço), exclusão forte de turno.
+
 ## [2.4.1] — Central de Impressora, modos de vale e blindagem de impressão
 
 ### Adicionado

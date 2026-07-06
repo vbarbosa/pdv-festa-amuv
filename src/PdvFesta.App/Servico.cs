@@ -118,9 +118,64 @@ public sealed class Servico : IDisposable
     private List<Promocao>? _promosCache;
     public List<Promocao> Promocoes() => Repo.ListarPromocoes(incluirInativas: true);
     public List<Promocao> PromocoesAtivas() => _promosCache ??= Repo.ListarPromocoes(incluirInativas: false);
-    public long SalvarPromocao(Promocao p) { var id = Repo.SalvarPromocao(p); RecarregarPromocoes(); return id; }
-    public void InativarPromocao(long id) { Repo.InativarPromocao(id); RecarregarPromocoes(); }
-    public void ExcluirPromocao(long id) { Repo.ExcluirPromocao(id); RecarregarPromocoes(); }
+    public long SalvarPromocao(Promocao p)
+    {
+        var id = Repo.SalvarPromocao(p);
+        RecarregarPromocoes();
+        // COMODIDADE: uma promo do tipo Combo tambem vira um BOTAO na aba Promocoes (produto-combo
+        // espelho), com preco = soma dos itens - desconto. Assim o operador clica e adiciona tudo
+        // de uma vez (e o desconto ja aplica). So para Combos ATIVOS com itens.
+        if (p.Tipo == TipoPromocao.Combo && p.Ativo && p.Itens.Count > 0)
+            CriarOuAtualizarProdutoComboEspelho(id, p);
+        return id;
+    }
+
+    /// <summary>ID do produto-combo espelho de uma promocao (previsivel, para upsert idempotente).</summary>
+    private static string IdComboEspelho(long promoId) => $"promocombo_{promoId}";
+
+    private void CriarOuAtualizarProdutoComboEspelho(long promoId, Promocao p)
+    {
+        try
+        {
+            var catalogo = Repo.ListarProdutos();
+            // preco do combo = soma (preco unitario * qtd exigida) - desconto do combo
+            int somaItens = 0;
+            var composicao = new List<ComboItem>();
+            foreach (var req in p.Itens)
+            {
+                var prod = catalogo.FirstOrDefault(x => x.Id == req.ProdutoId);
+                if (prod is null) continue;
+                somaItens += prod.PrecoCentavos * Math.Max(1, req.Quantidade);
+                composicao.Add(new ComboItem { ProdutoId = req.ProdutoId, Quantidade = Math.Max(1, req.Quantidade) });
+            }
+            int preco = Math.Max(0, somaItens - p.ValorDescontoCentavos);
+
+            Repo.SalvarProduto(new Produto
+            {
+                Id = IdComboEspelho(promoId),
+                Nome = p.Descricao,
+                PrecoCentavos = preco,
+                Categoria = "Promocoes",
+                Atalho = 0,
+                Ativo = true,
+                Composicao = composicao
+            });
+        }
+        catch (Exception ex) { Log.Aviso($"Nao criou produto-combo espelho da promo #{promoId}: {ex.Message}"); }
+    }
+    public void InativarPromocao(long id) { Repo.InativarPromocao(id); InativarComboEspelho(id); RecarregarPromocoes(); }
+    public void ExcluirPromocao(long id) { Repo.ExcluirPromocao(id); InativarComboEspelho(id); RecarregarPromocoes(); }
+
+    /// <summary>Inativa o produto-combo espelho quando a promo e desligada/excluida (some da aba).</summary>
+    private void InativarComboEspelho(long promoId)
+    {
+        try
+        {
+            var esp = Repo.ListarProdutos().FirstOrDefault(x => x.Id == IdComboEspelho(promoId));
+            if (esp is not null) { esp.Ativo = false; Repo.SalvarProduto(esp); }
+        }
+        catch (Exception ex) { Log.Aviso($"Nao inativou combo espelho da promo #{promoId}: {ex.Message}"); }
+    }
     public void RecarregarPromocoes() => _promosCache = Repo.ListarPromocoes(incluirInativas: false);
 
     /// <summary>Reavalia os combos/promocoes sobre o carrinho atual (chamar a cada add/remove).</summary>
@@ -252,8 +307,56 @@ public sealed class Servico : IDisposable
     /// <summary>Movimentos (sangria/suprimento) de um turno especifico (para o detalhe do balanco).</summary>
     public List<MovimentoCaixa> MovimentosDoTurno(long caixaId) => Repo.ListarMovimentos(caixaId);
 
+    /// <summary>Nro de vendas de um caixa (para saber se pode excluir um turno de teste).</summary>
+    public int VendasNoCaixa(long caixaId) => Repo.ContarVendasDoCaixa(caixaId);
+
+    /// <summary>
+    /// Exclui um caixa/turno DE TESTE (sem vendas). Retorna false se tiver venda (nao apaga
+    /// dado real). Nao deixa excluir o caixa ABERTO no momento.
+    /// </summary>
+    public bool ExcluirCaixaDeTeste(long caixaId)
+    {
+        if (TurnoAtual?.Id == caixaId) return false;   // nao apaga o caixa aberto agora
+        return Repo.ExcluirCaixaSeVazio(caixaId);
+    }
+
+    /// <summary>
+    /// Exclui um caixa DE TESTE que TEM vendas (apaga o turno + suas vendas/itens/movimentos).
+    /// DESTRUTIVO — a UI so chama isto apos senha de admin + confirmacao por digitacao. Nao
+    /// exclui o caixa aberto. Retorna quantas vendas foram apagadas (-1 se recusou).
+    /// </summary>
+    public int ExcluirCaixaComVendas(long caixaId)
+    {
+        if (TurnoAtual?.Id == caixaId) return -1;      // nunca o caixa aberto
+        int n = Repo.ExcluirCaixaComVendas(caixaId);
+        Log.Aviso($"Caixa #{caixaId} EXCLUIDO com {n} venda(s) (exclusao forte de teste).");
+        return n;
+    }
+
     /// <summary>Vendas de um turno especifico (para o detalhe do balanco).</summary>
     public List<Venda> VendasDoCaixa(long caixaId) => Repo.ListarVendasPorCaixa(caixaId);
+
+    // ===================== MODULO GERENCIAL (por PERIODO de datas) =====================
+    // Desacoplado do caixa aberto: consulta direto o carimbo de tempo das vendas no banco.
+    // Base do Historico/Dashboard/CSV com "time travel" — ver vendas de qualquer dia/festa.
+
+    /// <summary>Vendas no periodo [inicio, fim] (null = sem limite). Independe do caixa aberto.</summary>
+    public List<Venda> VendasPorPeriodo(DateTime? inicio, DateTime? fim) => Repo.ListarVendasPorPeriodo(inicio, fim);
+
+    /// <summary>Resumo financeiro (por forma de pagamento) das vendas de um periodo.</summary>
+    public ResumoCaixa ResumoPorPeriodo(DateTime? inicio, DateTime? fim) =>
+        Caixa.Consolidar(Repo.ListarVendasPorPeriodo(inicio, fim));
+
+    /// <summary>Itens vendidos (agrupados) num periodo — para o grafico de mais vendidos.</summary>
+    public List<ItemVendido> ItensPorPeriodo(DateTime? inicio, DateTime? fim) =>
+        Caixa.ContarItens(Repo.ListarVendasPorPeriodo(inicio, fim));
+
+    /// <summary>
+    /// Precos praticados por item no periodo (para o contador): mostra cada preco usado e
+    /// quanto rendeu. Se um item mudou de preco durante a festa, aparecem linhas separadas.
+    /// </summary>
+    public List<PrecoPraticado> PrecosPraticadosPorPeriodo(DateTime? inicio, DateTime? fim) =>
+        Caixa.PrecosPraticados(Repo.ListarVendasPorPeriodo(inicio, fim));
 
     /// <summary>Vendas do turno atual (para a tela de historico/estorno).</summary>
     public List<Venda> VendasDoTurno()
@@ -295,10 +398,11 @@ public sealed class Servico : IDisposable
     /// se mostra o dialogo de "tentar imprimir de novo".
     /// </summary>
     public (Venda venda, bool impressaoOk, string impressaoMsg) FinalizarVenda(
-        FormaPagamento forma, int recebidoCentavos, string operador)
+        FormaPagamento forma, int recebidoCentavos, string operador, string observacao = "")
     {
         var venda = Carrinho.FecharVenda(forma, recebidoCentavos, operador);
         venda.CaixaId = TurnoAtual?.Id;       // vincula ao turno atual
+        venda.Observacao = observacao;        // ex: "CORTESIA: Joao Cantor"
         Repo.SalvarVenda(venda);              // 1) grava PRIMEIRO (dado seguro)
         Carrinho.Limpar();
         Log.Info($"Venda #{venda.Id} {forma} total={venda.TotalCentavos}c troco={venda.TrocoCentavos}c caixa={venda.CaixaId}");

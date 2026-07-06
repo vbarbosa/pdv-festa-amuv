@@ -152,6 +152,7 @@ public sealed class FormVendas : Form
         mArquivo.DropDownItems.Add(Item("Painel em Tempo Real", Keys.F4, (s, e) => AbrirDashboard()));
         mArquivo.DropDownItems.Add(Item("Histórico de Vendas", Keys.F3, (s, e) => AbrirHistorico()));
         mArquivo.DropDownItems.Add(Item("Balanço Geral (todos os caixas)", Keys.F6, (s, e) => AbrirBalancoGeral()));
+        mArquivo.DropDownItems.Add(Item("Relatório Gerencial (por período)", Keys.Control | Keys.R, (s, e) => AbrirRelatorioGerencial()));
         mArquivo.DropDownItems.Add(Item("Fechamento de Caixa", Keys.F9, (s, e) => AbrirFechamento()));
         mArquivo.DropDownItems.Add(Item("Exportar CSV do turno", Keys.Control | Keys.E, (s, e) => Dialogos.ExportarCsvComDialogo(this, _servico)));
         mArquivo.DropDownItems.Add(new ToolStripSeparator());
@@ -770,6 +771,14 @@ public sealed class FormVendas : Form
     {
         if (!Dialogos.LiberarAcao(this, _servico, AcaoProtegida.BalancoGeral)) return;
         Dialogos.Modal(this, () => new FormBalancoGeral(_servico));
+    }
+
+    // Relatorio Gerencial por PERIODO (time travel): ve vendas de qualquer dia, mesmo com
+    // caixa fechado. Dado gerencial -> mesma trava do balanco.
+    private void AbrirRelatorioGerencial()
+    {
+        if (!Dialogos.LiberarAcao(this, _servico, AcaoProtegida.BalancoGeral)) return;
+        Dialogos.Modal(this, () => new FormRelatorioGerencial(_servico));
     }
 
     private void AbrirTrocaOperador()

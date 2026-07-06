@@ -50,6 +50,8 @@ public static class ExportadorCsv
         sb.AppendLine(Linha(sep, "TOTAL EM GAVETA", Reais(resumo.TotalGavetaCentavos, c)));
         sb.AppendLine(Linha(sep, "Faturamento bruto", Reais(v.FaturamentoBrutoCentavos, c)));
         sb.AppendLine(Linha(sep, "N de vendas", v.QuantidadeVendas.ToString(c)));
+        sb.AppendLine(Linha(sep, "Cortesias (brindes)", v.QuantidadeCortesias.ToString(c)));
+        sb.AppendLine(Linha(sep, "Valor em cortesias", Reais(v.TotalCortesiaCentavos, c)));
         sb.AppendLine();
         sb.AppendLine(Linha(sep, "Produto", "Quantidade", "Total (R$)"));
         foreach (var it in itens)
@@ -68,7 +70,7 @@ public static class ExportadorCsv
         var sep = Sep(c);
         var sb = new StringBuilder();
 
-        sb.AppendLine(Linha(sep, "Venda", "Data/Hora", "Itens", "Total (R$)", "Pagamento", "Status", "Impressoes"));
+        sb.AppendLine(Linha(sep, "Venda", "Data/Hora", "Itens", "Total (R$)", "Pagamento", "Status", "Impressoes", "Observacao"));
         foreach (var venda in vendas)
         {
             // "2x Refri | 1x Bolo" — itens fisicos (ignora linha de desconto de combo)
@@ -83,7 +85,8 @@ public static class ExportadorCsv
                 Reais(venda.TotalCentavos, c),
                 NomePagamento(venda.Forma),
                 venda.Cancelada ? "CANCELADA" : "OK",
-                venda.Impressoes.ToString(c)));
+                venda.Impressoes.ToString(c),
+                venda.Observacao));   // ex: "CORTESIA: Joao Cantor"
         }
         return sb.ToString();
     }
@@ -94,6 +97,7 @@ public static class ExportadorCsv
         FormaPagamento.Pix => "Pix",
         FormaPagamento.CartaoDebito => "Debito",
         FormaPagamento.CartaoCredito => "Credito",
+        FormaPagamento.Cortesia => "Cortesia",
         _ => "Cartao"
     };
 }

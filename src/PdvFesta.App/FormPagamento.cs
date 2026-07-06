@@ -24,6 +24,9 @@ public sealed class FormPagamento : Form
     private readonly Button _btnPix = new();
     private readonly Button _btnDebito = new();
     private readonly Button _btnCredito = new();
+    private readonly Button _btnCortesia = new();
+    private readonly Label _lblNomeCortesia = new();
+    private readonly TextBox _txtNomeCortesia = new();
 
     private readonly int _totalCentavos;
 
@@ -38,7 +41,7 @@ public sealed class FormPagamento : Form
         StartPosition = FormStartPosition.CenterParent;
         FormBorderStyle = FormBorderStyle.FixedDialog;
         MaximizeBox = false; MinimizeBox = false;
-        ClientSize = new Size(480, 560);
+        ClientSize = new Size(480, 640);
         KeyPreview = true;
         Font = new Font("Segoe UI", 12F);
 
@@ -71,6 +74,21 @@ public sealed class FormPagamento : Form
         painelFormas.Controls.Add(_btnPix, 1, 0);
         painelFormas.Controls.Add(_btnDebito, 2, 0);
         painelFormas.Controls.Add(_btnCredito, 3, 0);
+
+        // ---- botao CORTESIA (linha propria, largo) ----
+        _btnCortesia.Text = "🎁 CORTESIA (brinde - nao cobra)  [O]";
+        _btnCortesia.Dock = DockStyle.Top; _btnCortesia.Height = 46; _btnCortesia.Margin = new Padding(8, 0, 8, 4);
+        _btnCortesia.FlatStyle = FlatStyle.Flat; _btnCortesia.Font = new Font("Segoe UI", 12F, FontStyle.Bold);
+        _btnCortesia.BackColor = Color.FromArgb(150, 90, 160); _btnCortesia.ForeColor = Color.White;
+        _btnCortesia.TabStop = false;
+        _btnCortesia.Click += (s, e) => SelecionarForma(FormaPagamento.Cortesia);
+
+        // campo do NOME de quem recebeu a cortesia (aparece so no modo Cortesia)
+        _lblNomeCortesia.Text = "Nome de quem recebeu (cortesia):"; _lblNomeCortesia.Dock = DockStyle.Top;
+        _lblNomeCortesia.Height = 26; _lblNomeCortesia.TextAlign = ContentAlignment.MiddleLeft;
+        _lblNomeCortesia.Padding = new Padding(12, 0, 0, 0); _lblNomeCortesia.Visible = false;
+        _txtNomeCortesia.Name = "txtNomeCortesia"; _txtNomeCortesia.Dock = DockStyle.Top;
+        _txtNomeCortesia.Font = new Font("Segoe UI", 14F); _txtNomeCortesia.Visible = false;
 
         var lblRec = new Label
         {
@@ -110,11 +128,14 @@ public sealed class FormPagamento : Form
         };
         btnOk.Click += (s, e) => Confirmar();
 
-        // Dock: adiciona de baixo pra cima
+        // Dock: adiciona de baixo pra cima (o ultimo Add fica no TOPO)
         Controls.Add(_lblTroco);
         Controls.Add(_painelRapido);
         Controls.Add(_txtRecebido);
         Controls.Add(lblRec);
+        Controls.Add(_txtNomeCortesia);      // campo nome (so visivel no modo Cortesia)
+        Controls.Add(_lblNomeCortesia);
+        Controls.Add(_btnCortesia);          // botao cortesia (linha propria)
         Controls.Add(painelFormas);
         Controls.Add(lblTotal);
         Controls.Add(btnOk);
@@ -179,15 +200,29 @@ public sealed class FormPagamento : Form
         Realcar(_btnPix, forma == FormaPagamento.Pix);
         Realcar(_btnDebito, forma == FormaPagamento.CartaoDebito);
         Realcar(_btnCredito, forma == FormaPagamento.CartaoCredito);
+        // botao cortesia: roxo normal / verde-escuro quando selecionado
+        _btnCortesia.BackColor = forma == FormaPagamento.Cortesia
+            ? Color.FromArgb(0, 120, 0) : Color.FromArgb(150, 90, 160);
 
         bool dinheiro = forma == FormaPagamento.Dinheiro;
+        bool cortesia = forma == FormaPagamento.Cortesia;
+
         _txtRecebido.Enabled = dinheiro;
         _painelRapido.Visible = dinheiro;
+        // campo do nome so aparece na cortesia
+        _lblNomeCortesia.Visible = cortesia;
+        _txtNomeCortesia.Visible = cortesia;
 
         if (dinheiro)
         {
             _txtRecebido.Text = "";
             _txtRecebido.Focus();
+        }
+        else if (cortesia)
+        {
+            // cortesia: brinde -> recebido 0, sem troco. Foca o nome pra registrar quem recebeu.
+            _txtRecebido.Text = "0,00";
+            _txtNomeCortesia.Focus();
         }
         else
         {
@@ -235,7 +270,10 @@ public sealed class FormPagamento : Form
             case Keys.P: SelecionarForma(FormaPagamento.Pix); e.Handled = e.SuppressKeyPress = true; break;
             case Keys.B: SelecionarForma(FormaPagamento.CartaoDebito); e.Handled = e.SuppressKeyPress = true; break;
             case Keys.C: SelecionarForma(FormaPagamento.CartaoCredito); e.Handled = e.SuppressKeyPress = true; break;
-            case Keys.Enter: Confirmar(); e.Handled = e.SuppressKeyPress = true; break;
+            case Keys.O: SelecionarForma(FormaPagamento.Cortesia); e.Handled = e.SuppressKeyPress = true; break;
+            case Keys.Enter:
+                // no campo do nome da cortesia, Enter confirma tambem (nao quebra linha)
+                Confirmar(); e.Handled = e.SuppressKeyPress = true; break;
             case Keys.Escape: DialogResult = DialogResult.Cancel; Close(); break;
         }
     }
@@ -243,6 +281,8 @@ public sealed class FormPagamento : Form
     private void Confirmar()
     {
         int recebido = 0;
+        string observacao = "";
+
         if (_forma == FormaPagamento.Dinheiro)
         {
             var rec = Dinheiro.ParseCentavos(_txtRecebido.Text);
@@ -255,12 +295,26 @@ public sealed class FormPagamento : Form
             }
             recebido = rec.Value;
         }
+        else if (_forma == FormaPagamento.Cortesia)
+        {
+            // cortesia exige o NOME de quem recebeu (rastreabilidade dos brindes)
+            var nome = _txtNomeCortesia.Text.Trim();
+            if (string.IsNullOrWhiteSpace(nome))
+            {
+                MessageBox.Show("Informe o NOME de quem recebeu a cortesia.", "Cortesia",
+                    MessageBoxButtons.OK, MessageBoxIcon.Warning);
+                _txtNomeCortesia.Focus();
+                return;
+            }
+            observacao = "CORTESIA: " + nome;
+            recebido = 0;   // brinde: nao entra dinheiro
+        }
 
         Venda venda;
         bool impressaoOk; string impressaoMsg;
         try
         {
-            (venda, impressaoOk, impressaoMsg) = _servico.FinalizarVenda(_forma, recebido, operador: "");
+            (venda, impressaoOk, impressaoMsg) = _servico.FinalizarVenda(_forma, recebido, operador: "", observacao: observacao);
         }
         catch (Exception ex)
         {
